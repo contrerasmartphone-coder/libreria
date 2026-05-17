@@ -19,7 +19,7 @@ export default function BookCard({ book, onEdit, onDelete, viewMode }: BookCardP
         className="group flex gap-3 border-b border-editorial-text/5 pb-3 hover:bg-black/5 px-2 -mx-2 transition-colors font-serif cursor-pointer items-center min-h-[5rem]"
         onClick={() => onEdit(book)}
       >
-        <div className="w-14 h-20 bg-[#DEDCD5] shadow-sm shrink-0 flex items-center justify-center p-1 border border-editorial-text/5 transform transition-transform group-hover:-rotate-1">
+        <div className="w-12 h-16 md:w-14 md:h-20 bg-[#DEDCD5] shadow-sm shrink-0 flex items-center justify-center p-1 border border-editorial-text/5 transform transition-transform group-hover:-rotate-1">
           <BookOpen size={20} className="opacity-10" />
         </div>
         <div className="flex flex-col flex-1 min-w-0">
@@ -39,28 +39,7 @@ export default function BookCard({ book, onEdit, onDelete, viewMode }: BookCardP
             </span>
             <span className="text-[11px] md:text-[10px] font-sans opacity-70 italic font-bold">{book.scaffale ? `Scaffale ${book.scaffale}` : "Archivio"}</span>
             
-            <div className="ml-auto hidden md:flex items-center gap-1 md:gap-2 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(book);
-                }} 
-                className="p-1.5 hover:bg-black/5 rounded-full transition-colors"
-                title="Modifica"
-              >
-                <Edit2 size={14} className="text-editorial-text" />
-              </button>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(book.id);
-                }} 
-                className="p-1.5 hover:bg-red-50 rounded-full transition-colors"
-                title="Elimina"
-              >
-                <Trash2 size={14} className="text-red-700" />
-              </button>
-            </div>
+
           </div>
         </div>
       </div>
@@ -73,7 +52,7 @@ export default function BookCard({ book, onEdit, onDelete, viewMode }: BookCardP
       onClick={() => onEdit(book)}
     >
       <div className={cn(
-        "aspect-[3/4] w-[90%] md:w-[80%] mx-auto mb-4 md:mb-6 shadow-xl md:shadow-2xl flex items-center justify-center p-4 md:p-6 text-center border border-editorial-text/5 relative overflow-hidden transition-all duration-500 group-hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.15)] lg:group-hover:-translate-y-2 shrink-0",
+        "aspect-[3/4] w-[70%] md:w-[65%] lg:w-[80%] mx-auto mb-4 md:mb-6 shadow-xl md:shadow-2xl flex items-center justify-center p-4 md:p-6 text-center border border-editorial-text/5 relative overflow-hidden transition-all duration-500 group-hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.15)] lg:group-hover:-translate-y-2 shrink-0",
         book.inPrestito ? "bg-[#212121]" : "bg-[#DEDCD5]"
       )}>
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
@@ -90,21 +69,7 @@ export default function BookCard({ book, onEdit, onDelete, viewMode }: BookCardP
           <BookOpen className={cn("w-8 h-8 md:w-14 md:h-14 mx-auto mb-2 md:mb-4 opacity-20", book.inPrestito ? "text-white" : "text-editorial-text")} />
         </div>
 
-        <div className="absolute bottom-0 left-0 w-full p-4 md:p-4 hidden md:flex justify-between items-center bg-editorial-text/95 backdrop-blur-md text-editorial-bg translate-y-full lg:group-hover:translate-y-0 transition-transform duration-300 px-6 md:px-6">
-          <div className="p-3 md:p-2 opacity-80" title="Dettagli">
-            <Edit2 size={24} className="md:w-5 md:h-5" />
-          </div>
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(book.id);
-            }} 
-            className="p-3 md:p-2 hover:bg-red-500/20 rounded-full transition-all text-red-300 active:scale-90"
-            title="Rimuovi"
-          >
-            <Trash2 size={24} className="md:w-5 md:h-5" />
-          </button>
-        </div>
+
       </div>
 
       <div className="flex flex-col flex-1 text-center md:text-left mt-2">

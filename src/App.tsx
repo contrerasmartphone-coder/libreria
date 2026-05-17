@@ -19,7 +19,7 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [search, setSearch] = useState("");
-  const [isMenuOpen, setIsMenuOpen] = useState(true);
+  const [isMenuOpen, setIsMenuOpen] = useState(window.innerWidth >= 1024);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [totalCount, setTotalCount] = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);
@@ -152,7 +152,7 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="max-w-sm w-full"
+            className="max-w-[280px] w-full"
           >
             <div className="mb-6 flex justify-center">
               <div className="w-16 h-20 bg-editorial-text flex items-center justify-center shadow-2xl skew-y-3">
@@ -199,7 +199,7 @@ export default function App() {
                   className="w-full mt-4 flex items-center justify-center gap-3 bg-editorial-text text-editorial-bg py-3.5 px-6 font-sans text-[10px] font-black uppercase tracking-[0.2em] hover:opacity-90 transition-all active:scale-95 group"
                 >
                   <LogIn className="w-4 h-4" />
-                  ACCEDI AL SISTEMA
+                  ENTRA
                 </button>
               </form>
             ) : (
@@ -232,8 +232,8 @@ export default function App() {
                 className="flex items-center gap-2.5 md:gap-3 p-1.5 md:p-1 hover:bg-black/5 transition-all rounded-sm group active:scale-[0.98]"
                 title={isMenuOpen ? "Nascondi Menu" : "Mostra Menu"}
               >
-                <div className="w-7 h-9 md:w-5 md:h-7 bg-editorial-text flex items-center justify-center shadow-sm skew-y-1 shrink-0 transition-transform group-hover:scale-105">
-                  <Library size={14} className="text-editorial-bg" />
+                <div className="w-8 h-10 md:w-5 md:h-7 bg-editorial-text flex items-center justify-center shadow-sm skew-y-1 shrink-0 transition-transform group-hover:scale-105">
+                  <Library className="text-editorial-bg w-4 h-4 md:w-3.5 md:h-3.5" />
                 </div>
                 <div className="flex items-center gap-1.5 overflow-hidden">
                   <h1 className="text-xl md:text-lg font-black tracking-tighter italic hidden xs:block lg:block whitespace-nowrap">BIBLIOTECA</h1>

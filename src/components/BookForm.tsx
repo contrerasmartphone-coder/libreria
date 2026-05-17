@@ -260,7 +260,7 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
           <div className="p-4 bg-white/50 border border-editorial-text/10 rounded-sm space-y-4">
             <div className="flex items-center gap-3">
               <input type="checkbox" id="inPrestito" className="w-4.5 h-4.5 accent-editorial-text" checked={formData.inPrestito} onChange={() => handleCheckbox('inPrestito')} />
-              <label htmlFor="inPrestito" className="text-[11px] font-black uppercase tracking-widest cursor-pointer opacity-80">Disponibilità</label>
+              <label htmlFor="inPrestito" className="text-[11px] font-black uppercase tracking-widest cursor-pointer opacity-80">In Prestito</label>
             </div>
             {formData.inPrestito && (
               <div className="grid grid-cols-2 gap-3 pt-1">

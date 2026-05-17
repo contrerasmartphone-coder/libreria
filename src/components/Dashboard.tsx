@@ -213,7 +213,16 @@ export default function Dashboard({
           "fixed inset-y-0 left-0 lg:relative lg:translate-x-0"
         )}
       >
-        <div className="w-[320px] flex flex-col h-full p-10 overflow-y-auto custom-scrollbar">
+        <div className="w-[320px] flex flex-col h-full p-10 overflow-y-auto custom-scrollbar relative">
+            {/* Mobile Close Button */}
+            <button 
+              onClick={() => setIsMenuOpen(false)}
+              className="absolute top-4 right-4 p-2 hover:bg-black/5 rounded-sm lg:hidden"
+              title="Chiudi Menu"
+            >
+              <X size={20} className="text-editorial-text opacity-60" />
+            </button>
+
             <section className="mb-10">
               <h3 className="font-sans text-[11px] uppercase tracking-[0.2em] font-black mb-4 opacity-80 italic border-b border-editorial-text/10 pb-2">Statistiche</h3>
               <div className="flex items-baseline gap-2">
