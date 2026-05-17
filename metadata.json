@@ -1,0 +1,8 @@
+{
+  "name": "Gestore Biblioteca Supabase",
+  "description": "Un'applicazione completa per la catalogazione di libri, autori e prestiti, integrata con Supabase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
