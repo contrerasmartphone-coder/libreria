@@ -59,6 +59,10 @@ export const libraryService = {
     fields.forEach(f => {
       if ((book as any)[f] !== undefined) {
         const val = (book as any)[f];
+        // Don't send empty strings for numeric IDs or if we want DB to auto-generate
+        if (f === 'codice' && val === "") {
+          return;
+        }
         dbRow[f] = val === "" ? null : val;
       }
     });
@@ -74,7 +78,7 @@ export const libraryService = {
   mapDbToBook(row: any): Book {
     return {
       ...row,
-      id: row.id || row.codice, // Fallback to codice if id column is missing from schema
+      id: row.codice, // We use codice as the frontend ID
       ownerId: row.owner_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at
@@ -87,10 +91,28 @@ export const libraryService = {
       const user = await this.getCurrentUser();
       if (!user) throw new Error("Utente non autenticato. Effettua nuovamente il login.");
 
+      // Verifica duplicato codice PRIMA del salvataggio
+      const { data: existingBook } = await supabase
+        .from('books')
+        .select('titolo')
+        .eq('codice', book.codice)
+        .maybeSingle();
+
+      if (existingBook) {
+        throw new Error(`Il codice ${book.codice} è già assegnato al volume: "${existingBook.titolo}"`);
+      }
+
       const now = new Date().toISOString();
+      let codiceToUse = book.codice;
+
+      // Se il codice non è fornito, cerchiamo di trovarne uno libero (fallback di sicurezza)
+      if (!codiceToUse || codiceToUse === "") {
+        codiceToUse = (await this.getNextAvailableCode()).toString();
+      }
+
       const insertData = this.mapBookToDb({
         ...book,
-        id: crypto.randomUUID(),
+        codice: codiceToUse,
         ownerId: user.id,
         createdAt: now,
         updatedAt: now
@@ -105,19 +127,25 @@ export const libraryService = {
       
       if (error) {
         console.error("Errore critico salvataggio libro Supabase:", error);
+        // If we still get a duplicate key, suggest a manual code or report the error
         throw new Error(`Errore database: ${error.message}${error.details ? ' - ' + error.details : ''} (Codice: ${error.code})`);
       }
       
       if (!data || data.length === 0) {
-        console.warn("Dati non restituiti dopo insert (possibile RLS). Restituisco l'ID generato.");
-        return insertData.id;
+        return insertData.codice;
       }
       
-      console.log("Libro salvato con successo. ID:", data[0].id);
-      return data[0].id;
+      return data[0].codice;
     }
 
     const books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+    
+    // Verifica duplicato codice PRIMA del salvataggio locale
+    const duplicate = books.find(b => b.codice === book.codice);
+    if (duplicate) {
+      throw new Error(`Il codice ${book.codice} è già assegnato al volume: "${duplicate.titolo}"`);
+    }
+
     const newBook: Book = {
       ...book,
       id: crypto.randomUUID(),
@@ -132,24 +160,47 @@ export const libraryService = {
 
   async updateBook(id: string, updates: Partial<Book>): Promise<void> {
     if (this.isCloudEnabled) {
+      if (updates.codice) {
+        // Verifica duplicato codice se è stato modificato
+        const { data: existingBook } = await supabase
+          .from('books')
+          .select('codice, titolo')
+          .eq('codice', updates.codice)
+          .maybeSingle();
+
+        if (existingBook && String(existingBook.codice) !== String(id)) {
+          throw new Error(`Il codice ${updates.codice} è già assegnato al volume: "${existingBook.titolo}"`);
+        }
+      }
+
       const dbUpdates = this.mapBookToDb({
         ...updates,
         updatedAt: new Date().toISOString()
       });
       
-      const { error } = await supabase
+      // Match by codice exclusively
+      const { error: updateError } = await supabase
         .from('books')
         .update(dbUpdates)
-        .eq('codice', id); // Use codice since id column is missing
+        .eq('codice', id); 
       
-      if (error) {
-        console.error("Errore aggiornamento libro Cloud:", error);
-        throw error;
+      if (updateError) {
+        console.error("Errore aggiornamento libro Cloud:", updateError);
+        throw updateError;
       }
       return;
     }
 
     const books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+
+    if (updates.codice) {
+      // Verifica duplicato codice se è stato modificato (locale)
+      const duplicate = books.find(b => b.codice === updates.codice && b.id !== id);
+      if (duplicate) {
+        throw new Error(`Il codice ${updates.codice} è già assegnato al volume: "${duplicate.titolo}"`);
+      }
+    }
+
     const index = books.findIndex(b => b.id === id);
     if (index !== -1) {
       books[index] = { 
@@ -166,7 +217,7 @@ export const libraryService = {
       const { error } = await supabase
         .from('books')
         .delete()
-        .eq('codice', id); // Use codice since id column is missing
+        .eq('codice', id);
       
       if (error) throw error;
       return;
@@ -215,7 +266,8 @@ export const libraryService = {
         .select('*', { count: 'exact' });
       
       if (searchTerm && searchTerm.trim() !== "") {
-        query = query.ilike('titolo', `%${searchTerm.trim()}%`);
+        const term = `%${searchTerm.trim()}%`;
+        query = query.or(`titolo.ilike.${term},autore.ilike.${term},codice.ilike.${term}`);
       }
 
       // Add specific filters
@@ -246,7 +298,11 @@ export const libraryService = {
     // Search filter
     if (searchTerm && searchTerm.trim() !== "") {
       const term = searchTerm.toLowerCase().trim();
-      books = books.filter(b => b.titolo?.toLowerCase().includes(term));
+      books = books.filter(b => 
+        b.titolo?.toLowerCase().includes(term) || 
+        b.autore?.toLowerCase().includes(term) || 
+        b.codice?.toLowerCase().includes(term)
+      );
     }
 
     // Specific filters
@@ -271,22 +327,26 @@ export const libraryService = {
     return { books: paginatedBooks, total };
   },
 
-  async getFilterOptions(): Promise<{ autores: string[], generes: string[], editores: string[] }> {
+  async getFilterOptions(): Promise<{ autores: string[], generes: string[], editores: string[], collanas: string[], naziones: string[] }> {
     if (this.isCloudEnabled) {
       const { data, error } = await supabase
         .from('books')
-        .select('autore, genere, editore');
+        .select('autore, genere, editore, collana, nazione');
       
-      if (error) return { autores: [], generes: [], editores: [] };
+      if (error) return { autores: [], generes: [], editores: [], collanas: [], naziones: [] };
       
       const autores = Array.from(new Set(data.map(i => i.autore).filter(Boolean))) as string[];
       const generes = Array.from(new Set(data.map(i => i.genere).filter(Boolean))) as string[];
       const editores = Array.from(new Set(data.map(i => i.editore).filter(Boolean))) as string[];
+      const collanas = Array.from(new Set(data.map(i => i.collana).filter(Boolean))) as string[];
+      const naziones = Array.from(new Set(data.map(i => i.nazione).filter(Boolean))) as string[];
       
       return { 
         autores: autores.sort(), 
         generes: generes.sort(), 
-        editores: editores.sort() 
+        editores: editores.sort(),
+        collanas: collanas.sort(),
+        naziones: naziones.sort()
       };
     }
     
@@ -294,11 +354,15 @@ export const libraryService = {
     const autores = Array.from(new Set(books.map(i => i.autore).filter(Boolean))) as string[];
     const generes = Array.from(new Set(books.map(i => i.genere).filter(Boolean))) as string[];
     const editores = Array.from(new Set(books.map(i => i.editore).filter(Boolean))) as string[];
+    const collanas = Array.from(new Set(books.map(i => i.collana).filter(Boolean))) as string[];
+    const naziones = Array.from(new Set(books.map(i => i.nazione).filter(Boolean))) as string[];
     
     return { 
       autores: autores.sort(), 
       generes: generes.sort(), 
-      editores: editores.sort() 
+      editores: editores.sort(),
+      collanas: collanas.sort(),
+      naziones: naziones.sort()
     };
   },
 
@@ -318,6 +382,15 @@ export const libraryService = {
   },
 
   async batchImportBooks(books: any[]): Promise<void> {
+    const existingBooks = await this.getBooks();
+    const existingCodes = new Map(existingBooks.map(b => [b.codice, b.titolo]));
+
+    for (const book of books) {
+      if (book.codice && existingCodes.has(book.codice)) {
+        throw new Error(`Importazione fallita: il codice ${book.codice} è già assegnato al volume: "${existingCodes.get(book.codice)}"`);
+      }
+    }
+
     if (this.isCloudEnabled) {
       const user = await this.getCurrentUser();
       if (!user) throw new Error("Utente non autenticato. Impossibile importare sul cloud.");
@@ -349,7 +422,6 @@ export const libraryService = {
       return;
     }
 
-    const existingBooks = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
     const nowLocal = new Date().toISOString();
     const newBooks = books.map(book => ({
       ...book,
@@ -359,5 +431,32 @@ export const libraryService = {
       updatedAt: nowLocal,
     }));
     saveLocalData(LOCAL_STORAGE_KEYS.BOOKS, [...existingBooks, ...newBooks]);
+  },
+
+  async getNextAvailableCode(): Promise<string> {
+    let books: Book[] = [];
+    if (this.isCloudEnabled) {
+      const { data, error } = await supabase
+        .from('books')
+        .select('codice');
+      if (error) {
+        console.error("Errore recupero codici per auto-incremento:", error);
+        return "10000";
+      }
+      books = (data || []).map(b => this.mapDbToBook(b));
+    } else {
+      books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+    }
+
+    const numericCodes = books
+      .map(b => parseInt(b.codice))
+      .filter(n => !isNaN(n));
+
+    const baseCode = 10000;
+    if (numericCodes.length === 0) return baseCode.toString();
+
+    const maxCode = Math.max(...numericCodes);
+    const nextCode = Math.max(baseCode, maxCode + 1);
+    return nextCode.toString();
   }
 };

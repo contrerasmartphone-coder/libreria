@@ -5,10 +5,12 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import Dashboard from "./components/Dashboard";
-import { BookOpen, LogIn, LogOut, Library, ShieldAlert, Search, Menu, ChevronLeft, Grid, List as ListIcon, Plus } from "lucide-react";
+import { BookOpen, LogIn, LogOut, Library, ShieldAlert, Search, Menu, ChevronLeft, Grid, List as ListIcon, Plus, Type } from "lucide-react";
 import { motion } from "motion/react";
 import { libraryService } from "./services/libraryService";
 import { supabase } from "./lib/supabase";
+
+type FontTheme = "serif" | "sans" | "mono";
 
 export default function App() {
   const [user, setUser] = useState<any | null>(null);
@@ -21,11 +23,25 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(window.innerWidth >= 1024);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [fontTheme, setFontTheme] = useState<FontTheme>(() => {
+    return (localStorage.getItem("library-font-theme") as FontTheme) || "serif";
+  });
   const [totalCount, setTotalCount] = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);
   const [isFormOpen, setIsFormOpen] = useState(false);
-
   const isCloudEnabled = libraryService.isCloudEnabled;
+
+  useEffect(() => {
+    localStorage.setItem("library-font-theme", fontTheme);
+    document.documentElement.setAttribute('data-theme', fontTheme);
+  }, [fontTheme]);
+
+  const toggleFontTheme = () => {
+    const themes: FontTheme[] = ["serif", "sans", "mono"];
+    const currentIndex = themes.indexOf(fontTheme);
+    const nextIndex = (currentIndex + 1) % themes.length;
+    setFontTheme(themes[nextIndex]);
+  };
 
   useEffect(() => {
     if (!isCloudEnabled) {
@@ -146,7 +162,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-editorial-bg text-editorial-text font-serif selection:bg-editorial-text selection:text-white">
+    <div className={`min-h-screen bg-editorial-bg text-editorial-text selection:bg-editorial-text selection:text-white`}>
       {!user && !useLocalMode ? (
         <div className="h-screen flex flex-col items-center justify-center p-4 text-center">
           <motion.div 
@@ -247,7 +263,7 @@ export default function App() {
                 <input
                   type="text"
                   placeholder="Cerca volume..."
-                  className="w-full pl-8 pr-2 py-2.5 md:py-1 bg-transparent text-lg md:text-sm font-serif italic focus:outline-none placeholder:text-editorial-text/90"
+                  className="w-full pl-8 pr-2 py-2.5 md:py-1 bg-transparent text-lg md:text-sm italic focus:outline-none placeholder:text-editorial-text/90"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -259,6 +275,15 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2.5 md:gap-2">
+              <button
+                onClick={toggleFontTheme}
+                className="p-3 md:p-1.5 border border-editorial-text/10 hover:bg-black/5 transition-all rounded-sm flex items-center gap-1.5"
+                title="Cambia carattere"
+              >
+                <Type size={20} className="md:w-3.5 md:h-3.5" />
+                <span className="hidden sm:inline font-sans text-[9px] font-black uppercase tracking-widest">{fontTheme}</span>
+              </button>
+
               <button
                 onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}
                 className="p-3 md:p-1.5 border border-editorial-text/10 hover:bg-editorial-text hover:text-editorial-bg transition-all rounded-sm"

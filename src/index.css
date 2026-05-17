@@ -1,11 +1,40 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=JetBrains+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
+:root {
+  --base-serif: "Playfair Display", serif;
+  --base-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --base-mono: "JetBrains Mono", monospace;
+}
+
 @theme {
-  --font-serif: "Playfair Display", serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--base-serif);
+  --font-sans: var(--base-sans);
+  --font-mono: var(--base-mono);
   
   --color-editorial-bg: #F5F5F0;
   --color-editorial-text: #111111;
   --color-editorial-muted: rgba(17, 17, 17, 0.65);
+}
+
+/* Theme overrides */
+[data-theme="serif"] {
+  --font-sans: var(--base-serif) !important;
+  --font-serif: var(--base-serif) !important;
+  --font-mono: var(--base-serif) !important;
+  font-family: var(--base-serif) !important;
+}
+
+[data-theme="sans"] {
+  --font-sans: var(--base-sans) !important;
+  --font-serif: var(--base-sans) !important;
+  --font-mono: var(--base-sans) !important;
+  font-family: var(--base-sans) !important;
+}
+
+[data-theme="mono"] {
+  --font-sans: var(--base-mono) !important;
+  --font-serif: var(--base-mono) !important;
+  --font-mono: var(--base-mono) !important;
+  font-family: var(--base-mono) !important;
 }

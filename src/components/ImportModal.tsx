@@ -243,7 +243,7 @@ export default function ImportModal({ onClose, onSuccess }: ImportModalProps) {
                     Anteprima Dati (Prime 5 voci)
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left font-serif text-sm">
+                    <table className="w-full text-left text-sm">
                       <thead className="bg-white border-b border-editorial-text/5">
                         <tr>
                           {Object.keys(data[0]).slice(0, 6).map(key => (
@@ -255,7 +255,7 @@ export default function ImportModal({ onClose, onSuccess }: ImportModalProps) {
                         {data.slice(0, 5).map((row, i) => (
                           <tr key={i} className="border-b border-editorial-text/5 hover:bg-neutral-50 transition-colors">
                             {Object.values(row).slice(0, 6).map((val: any, j) => (
-                              <td key={j} className="p-4 truncate max-w-[150px]">{String(val)}</td>
+                              <td key={j} className="p-4">{String(val)}</td>
                             ))}
                           </tr>
                         ))}

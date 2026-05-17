@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Search, Filter, BookText, Grid, List as ListIcon, X, FileUp, Menu, ChevronLeft, LogOut } from "lucide-react";
+import { Plus, Search, Filter, BookText, Grid, List as ListIcon, X, FileUp, Menu, ChevronLeft, LogOut, ChevronDown } from "lucide-react";
 import { libraryService } from "../services/libraryService";
 import { Book } from "../types";
 import { motion, AnimatePresence } from "motion/react";
@@ -52,8 +52,14 @@ export default function Dashboard({
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filters, setFilters] = useState<{ autore?: string; genere?: string; editore?: string }>({});
-  const [filterOptions, setFilterOptions] = useState<{ autores: string[], generes: string[], editores: string[] }>({
-    autores: [], generes: [], editores: []
+  const [filterOptions, setFilterOptions] = useState<{ 
+    autores: string[], 
+    generes: string[], 
+    editores: string[],
+    collanas: string[],
+    naziones: string[]
+  }>({
+    autores: [], generes: [], editores: [], collanas: [], naziones: []
   });
   
   // Feedback State
@@ -259,39 +265,84 @@ export default function Dashboard({
               <h3 className="font-sans text-[11px] uppercase tracking-[0.2em] font-black mb-4 opacity-80 italic border-b border-editorial-text/10 pb-2">Filtri Avanzati</h3>
               <div className="space-y-5">
                 <div className="flex flex-col gap-1">
-                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100">Genere</label>
-                  <select 
-                    value={filters.genere || ""} 
-                    onChange={(e) => setFilters(prev => ({ ...prev, genere: e.target.value || undefined }))}
-                    className="bg-transparent border-b border-editorial-text/20 py-1 font-serif italic font-bold text-base focus:outline-none"
-                  >
-                    <option value="">Tutti i generi</option>
-                    {filterOptions.generes.map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
+                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Genere</label>
+                  <div className="group relative">
+                    <button className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between group-hover:border-editorial-text transition-colors capitalize">
+                      {filters.genere || "Tutti i generi"}
+                      <ChevronDown size={14} className="opacity-40" />
+                    </button>
+                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[60] max-h-[160px] overflow-y-auto">
+                      <button 
+                        onClick={() => setFilters(prev => ({ ...prev, genere: undefined }))}
+                        className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                      >
+                        Tutti i generi
+                      </button>
+                      {filterOptions.generes.map(g => (
+                        <button 
+                          key={g} 
+                          onClick={() => setFilters(prev => ({ ...prev, genere: g }))}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100">Autore</label>
-                  <select 
-                    value={filters.autore || ""} 
-                    onChange={(e) => setFilters(prev => ({ ...prev, autore: e.target.value || undefined }))}
-                    className="bg-transparent border-b border-editorial-text/20 py-1 font-serif italic font-bold text-base focus:outline-none"
-                  >
-                    <option value="">Tutti gli autori</option>
-                    {filterOptions.autores.map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
+                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Autore</label>
+                  <div className="group relative">
+                    <button className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between group-hover:border-editorial-text transition-colors capitalize">
+                      {filters.autore || "Tutti gli autori"}
+                      <ChevronDown size={14} className="opacity-40" />
+                    </button>
+                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[60] max-h-[160px] overflow-y-auto">
+                      <button 
+                        onClick={() => setFilters(prev => ({ ...prev, autore: undefined }))}
+                        className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                      >
+                        Tutti gli autori
+                      </button>
+                      {filterOptions.autores.map(a => (
+                        <button 
+                          key={a} 
+                          onClick={() => setFilters(prev => ({ ...prev, autore: a }))}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                        >
+                          {a}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100">Editore</label>
-                  <select 
-                    value={filters.editore || ""} 
-                    onChange={(e) => setFilters(prev => ({ ...prev, editore: e.target.value || undefined }))}
-                    className="bg-transparent border-b border-editorial-text/20 py-1 font-serif italic font-bold text-base focus:outline-none"
-                  >
-                    <option value="">Tutti gli editori</option>
-                    {filterOptions.editores.map(ed => <option key={ed} value={ed}>{ed}</option>)}
-                  </select>
+                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Editore</label>
+                  <div className="group relative">
+                    <button className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between group-hover:border-editorial-text transition-colors capitalize">
+                      {filters.editore || "Tutti gli editori"}
+                      <ChevronDown size={14} className="opacity-40" />
+                    </button>
+                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[60] max-h-[160px] overflow-y-auto">
+                      <button 
+                        onClick={() => setFilters(prev => ({ ...prev, editore: undefined }))}
+                        className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                      >
+                        Tutti gli editori
+                      </button>
+                      {filterOptions.editores.map(ed => (
+                        <button 
+                          key={ed} 
+                          onClick={() => setFilters(prev => ({ ...prev, editore: ed }))}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                        >
+                          {ed}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {Object.values(filters).some(Boolean) && (
@@ -335,7 +386,7 @@ export default function Dashboard({
             <div className="flex items-center justify-between gap-4">
               <div className="flex flex-col font-sans">
                 <span className="text-[10px] uppercase font-black tracking-[0.2em] opacity-60 leading-none mb-2">Operatore</span>
-                <span className="text-sm font-black tracking-wider truncate max-w-[160px]">
+                <span className="text-sm font-black tracking-wider">
                   {useLocalMode ? "Ospite" : (user?.user_metadata?.full_name || user?.email?.split('@')[0])}
                 </span>
               </div>
@@ -376,7 +427,7 @@ export default function Dashboard({
               <div className={cn(
                 "grid",
                 viewMode === "grid" 
-                  ? "grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-x-3 gap-y-6 md:gap-x-8 md:gap-y-12" 
+                  ? "grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-x-3 gap-y-6 md:gap-x-6 md:gap-y-10" 
                   : "grid-cols-1 gap-y-2"
               )}>
                 <AnimatePresence mode="popLayout">
@@ -460,6 +511,14 @@ export default function Dashboard({
                    initialData={editingBook} 
                    onClose={() => setIsFormOpen(false)} 
                    onDelete={handleDelete}
+                   onError={(msg) => showToast(msg, "error")}
+                   suggestions={{
+                     autores: filterOptions.autores,
+                     generes: filterOptions.generes,
+                     editores: filterOptions.editores,
+                     collanas: filterOptions.collanas,
+                     naziones: filterOptions.naziones
+                   }}
                    onSuccess={() => {
                      setIsFormOpen(false);
                      setEditingBook(undefined);

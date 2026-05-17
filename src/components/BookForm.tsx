@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Book } from "../types";
 import { libraryService } from "../services/libraryService";
 import { Save, Loader2, BookOpen, Info, User, Tag, Calendar, MapPin, Layers, BookText, ShieldCheck, Languages, X, Trash2 } from "lucide-react";
@@ -8,10 +8,18 @@ interface BookFormProps {
   initialData?: Book;
   onClose: () => void;
   onSuccess: () => void;
+  onError?: (message: string) => void;
   onDelete?: (id: string | undefined) => Promise<void>;
+  suggestions?: {
+    autores: string[];
+    generes: string[];
+    editores: string[];
+    collanas: string[];
+    naziones: string[];
+  };
 }
 
-export default function BookForm({ initialData, onClose, onSuccess, onDelete }: BookFormProps) {
+export default function BookForm({ initialData, onClose, onSuccess, onError, onDelete, suggestions }: BookFormProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<Omit<Book, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>>(
     initialData ? {
@@ -67,6 +75,21 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
     }
   );
 
+// Pre-fill codice for new entries
+  useEffect(() => {
+    if (!initialData) {
+      const fetchNextCode = async () => {
+        try {
+          const nextCode = await libraryService.getNextAvailableCode();
+          setFormData(prev => ({ ...prev, codice: nextCode }));
+        } catch (e) {
+          console.error("Error fetching next code:", e);
+        }
+      };
+      fetchNextCode();
+    }
+  }, [initialData]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -79,7 +102,11 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
       onSuccess();
     } catch (error: any) {
       console.error("Save error:", error);
-      alert("Errore durante il salvataggio: " + (error.message || "Errore sconosciuto"));
+      if (onError) {
+        onError(error.message || "Errore sconosciuto durante il salvataggio");
+      } else {
+        alert("Errore durante il salvataggio: " + (error.message || "Errore sconosciuto"));
+      }
     } finally {
       setLoading(false);
     }
@@ -102,7 +129,7 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
   };
 
   return (
-    <form onSubmit={handleSubmit} className="relative font-serif px-6 md:px-8">
+    <form onSubmit={handleSubmit} className="relative px-6 md:px-8">
       {/* Sticky Header Actions */}
       <div className="sticky top-0 z-30 bg-editorial-bg/95 backdrop-blur-md border-b border-editorial-text/10 px-6 md:px-8 py-3 md:py-4 -mx-6 md:-mx-8 mb-6 flex items-center justify-between">
         <div className="flex flex-col">
@@ -158,12 +185,13 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
               <label className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">
                 <Info size={12} className="opacity-100" /> Titolo del Volume *
               </label>
-              <input
+              <textarea
                 required
                 name="titolo"
                 value={formData.titolo}
                 onChange={handleChange}
-                className="w-full bg-transparent border-b border-editorial-text/30 py-2 text-2xl font-black tracking-tight focus:outline-none focus:border-editorial-text transition-colors placeholder:text-editorial-text/20"
+                rows={2}
+                className="w-full bg-transparent border-b border-editorial-text/30 py-2 text-2xl font-black tracking-tight focus:outline-none focus:border-editorial-text transition-colors placeholder:text-editorial-text/20 resize-none"
                 placeholder="Titolo..."
               />
             </div>
@@ -173,11 +201,12 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
                 <label className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">
                   <Tag size={12} className="opacity-100" /> Codice Inventario
                 </label>
-                <input
+                <textarea
                   name="codice"
                   value={formData.codice}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text"
+                  rows={1}
+                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text resize-none"
                   placeholder="es. BN-0001"
                 />
               </div>
@@ -185,23 +214,43 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
                 <label className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">
                   <User size={12} className="opacity-100" /> Autore / Scrittore
                 </label>
-                <input
-                  name="autore"
-                  value={formData.autore}
-                  onChange={handleChange}
-                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text"
-                  placeholder="Nome Autore..."
-                />
+                <div className="relative group">
+                  <input
+                    name="autore"
+                    value={formData.autore}
+                    onChange={handleChange}
+                    className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text"
+                    placeholder="Nome Autore..."
+                    autoComplete="off"
+                  />
+                  {suggestions?.autores && suggestions.autores.length > 0 && (
+                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                      {suggestions.autores
+                        .filter(a => !formData.autore || a.toLowerCase().includes(formData.autore.toLowerCase()))
+                        .map(a => (
+                          <button 
+                            key={a} 
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, autore: a }))}
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          >
+                            {a}
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">
                   <BookOpen size={12} className="opacity-100" /> Titolo Originale
                 </label>
-                <input
+                <textarea
                   name="titoloOriginale"
                   value={formData.titoloOriginale}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text"
+                  rows={1}
+                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text resize-none"
                   placeholder="Se tradotto..."
                 />
               </div>
@@ -209,11 +258,12 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
                 <label className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">
                   <Languages size={12} className="opacity-100" /> Traduttore
                 </label>
-                <input
+                <textarea
                   name="traduttore"
                   value={formData.traduttore}
                   onChange={handleChange}
-                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text"
+                  rows={1}
+                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text resize-none"
                 />
               </div>
             </div>
@@ -230,19 +280,123 @@ export default function BookForm({ initialData, onClose, onSuccess, onDelete }: 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Casa Editrice</label>
-              <input name="editore" value={formData.editore} onChange={handleChange} className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" placeholder="Nome Editore..." />
+              <div className="relative group">
+                <input 
+                  name="editore" 
+                  value={formData.editore} 
+                  onChange={handleChange} 
+                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" 
+                  placeholder="Nome Editore..." 
+                  autoComplete="off"
+                />
+                {suggestions?.editores && suggestions.editores.length > 0 && (
+                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                    {suggestions.editores
+                      .filter(e => !formData.editore || e.toLowerCase().includes(formData.editore.toLowerCase()))
+                      .map(e => (
+                        <button 
+                          key={e} 
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, editore: e }))}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                        >
+                          {e}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Collana Editoriale</label>
-              <input name="collana" value={formData.collana} onChange={handleChange} className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" placeholder="es. I Classici" />
+              <div className="relative group">
+                <input 
+                  name="collana" 
+                  value={formData.collana} 
+                  onChange={handleChange} 
+                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" 
+                  placeholder="es. I Classici" 
+                  autoComplete="off"
+                />
+                {suggestions?.collanas && suggestions.collanas.length > 0 && (
+                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                    {suggestions.collanas
+                      .filter(c => !formData.collana || c.toLowerCase().includes(formData.collana.toLowerCase()))
+                      .map(c => (
+                        <button 
+                          key={c} 
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, collana: c }))}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                        >
+                          {c}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Categoria / Genere</label>
-              <input name="genere" value={formData.genere} onChange={handleChange} className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" placeholder="es. Narrativa" />
+              <div className="relative group">
+                <input 
+                  name="genere" 
+                  value={formData.genere} 
+                  onChange={handleChange} 
+                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" 
+                  placeholder="es. Narrativa" 
+                  autoComplete="off"
+                />
+                {suggestions?.generes && suggestions.generes.length > 0 && (
+                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                    {suggestions.generes
+                      .filter(g => !formData.genere || g.toLowerCase().includes(formData.genere.toLowerCase()))
+                      .map(g => (
+                        <button 
+                          key={g} 
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, genere: g }))}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                        >
+                          {g}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Collocazione (Scaffale)</label>
-              <input name="scaffale" value={formData.scaffale} onChange={handleChange} className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" placeholder="es. A-1" />
+              <textarea name="scaffale" value={formData.scaffale} onChange={handleChange} rows={1} className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text resize-none" placeholder="es. A-1" />
+            </div>
+            <div className="space-y-2">
+              <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Nazione</label>
+              <div className="relative group">
+                <input 
+                  name="nazione" 
+                  value={formData.nazione} 
+                  onChange={handleChange} 
+                  className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" 
+                  placeholder="es. Italia" 
+                  autoComplete="off"
+                />
+                {suggestions?.naziones && suggestions.naziones.length > 0 && (
+                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                    {suggestions.naziones
+                      .filter(n => !formData.nazione || n.toLowerCase().includes(formData.nazione.toLowerCase()))
+                      .map(n => (
+                        <button 
+                          key={n} 
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, nazione: n }))}
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                        >
+                          {n}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Anno di Pubblicazione</label>
