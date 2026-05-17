@@ -148,55 +148,55 @@ export default function App() {
   return (
     <div className="min-h-screen bg-editorial-bg text-editorial-text font-serif selection:bg-editorial-text selection:text-white">
       {!user && !useLocalMode ? (
-        <div className="h-screen flex flex-col items-center justify-center p-6 text-center">
+        <div className="h-screen flex flex-col items-center justify-center p-4 text-center">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="max-w-md w-full"
+            className="max-w-sm w-full"
           >
-            <div className="mb-12 flex justify-center">
-              <div className="w-24 h-32 bg-editorial-text flex items-center justify-center shadow-2xl skew-y-3">
-                <Library className="w-12 h-12 text-editorial-bg" />
+            <div className="mb-6 flex justify-center">
+              <div className="w-16 h-20 bg-editorial-text flex items-center justify-center shadow-2xl skew-y-3">
+                <Library className="w-10 h-10 text-editorial-bg" />
               </div>
             </div>
-            <h1 className="text-8xl font-bold tracking-tight mb-4 italic">Biblioteca</h1>
+            <h1 className="text-6xl font-bold tracking-tight mb-2 italic">Biblioteca</h1>
             {!isCloudEnabled && (
-              <div className="mb-8 px-6 py-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold uppercase tracking-widest leading-relaxed">
+              <div className="mb-6 px-4 py-2 bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold uppercase tracking-widest leading-relaxed">
                 Cloud Non Configurato <br/>
-                <span className="opacity-60 text-[10px]">I dati verranno salvati solo in questo browser</span>
+                <span className="opacity-60 text-[9px]">I dati verranno salvati solo in questo browser</span>
               </div>
             )}
-            <p className="font-sans text-xs uppercase tracking-[0.2em] font-bold opacity-70 mb-14">
+            <p className="font-sans text-[10px] uppercase tracking-[0.2em] font-bold opacity-70 mb-8">
               Catalogazione & Archiviazione Volumi
             </p>
             
             {isCloudEnabled ? (
-              <form onSubmit={handleLogin} className="space-y-4 text-left">
-                <div className="space-y-2">
-                  <label className="font-sans text-[10px] uppercase font-black tracking-widest opacity-60">Email</label>
+              <form onSubmit={handleLogin} className="space-y-3 text-left">
+                <div className="space-y-1.5">
+                  <label className="font-sans text-[9px] uppercase font-black tracking-widest opacity-60">Email</label>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-white border border-editorial-text/10 px-4 py-4 font-sans text-sm tracking-wide focus:outline-none focus:border-editorial-text transition-colors"
+                    className="w-full bg-white border border-editorial-text/10 px-3 py-2.5 font-sans text-sm tracking-wide focus:outline-none focus:border-editorial-text transition-colors"
                     placeholder="esempio@email.com"
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="font-sans text-[10px] uppercase font-black tracking-widest opacity-60">Password</label>
+                <div className="space-y-1.5">
+                  <label className="font-sans text-[9px] uppercase font-black tracking-widest opacity-60">Password</label>
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-white border border-editorial-text/10 px-4 py-4 font-sans text-sm tracking-wide focus:outline-none focus:border-editorial-text transition-colors"
+                    className="w-full bg-white border border-editorial-text/10 px-3 py-2.5 font-sans text-sm tracking-wide focus:outline-none focus:border-editorial-text transition-colors"
                     placeholder="••••••••"
                     required
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full mt-6 flex items-center justify-center gap-3 bg-editorial-text text-editorial-bg py-5 px-8 font-sans text-xs font-black uppercase tracking-[0.2em] hover:opacity-90 transition-all active:scale-95 group"
+                  className="w-full mt-4 flex items-center justify-center gap-3 bg-editorial-text text-editorial-bg py-3.5 px-6 font-sans text-[10px] font-black uppercase tracking-[0.2em] hover:opacity-90 transition-all active:scale-95 group"
                 >
                   <LogIn className="w-4 h-4" />
                   ACCEDI AL SISTEMA
@@ -205,7 +205,7 @@ export default function App() {
             ) : (
               <button
                 onClick={() => setUseLocalMode(true)}
-                className="w-full flex items-center justify-center gap-3 bg-editorial-text text-editorial-bg py-6 px-8 font-sans text-sm font-black uppercase tracking-[0.2em] hover:opacity-90 transition-all active:scale-95 group"
+                className="w-full flex items-center justify-center gap-3 bg-editorial-text text-editorial-bg py-4 px-6 font-sans text-xs font-black uppercase tracking-[0.2em] hover:opacity-90 transition-all active:scale-95 group"
               >
                 <BookOpen className="w-5 h-5" />
                 INIZIA (MODALITÀ LOCALE)
@@ -216,7 +216,7 @@ export default function App() {
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="mt-6 p-4 bg-red-50 border border-red-100 text-red-900 text-sm italic font-medium"
+                className="mt-4 p-3 bg-red-50 border border-red-100 text-red-900 text-xs italic font-medium"
               >
                 {loginError}
               </motion.div>
