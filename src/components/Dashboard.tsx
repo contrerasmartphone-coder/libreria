@@ -62,6 +62,19 @@ export default function Dashboard({
     autores: [], generes: [], editores: [], collanas: [], naziones: []
   });
   
+  const [openFilter, setOpenFilter] = useState<string | null>(null);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.filter-dropdown')) {
+        setOpenFilter(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  
   // Feedback State
   const [toast, setToast] = useState<{ message: string; type: ToastType; isVisible: boolean }>({
     message: "",
@@ -74,11 +87,25 @@ export default function Dashboard({
   };
 
   const isCloudEnabled = libraryService.isCloudEnabled;
+  
+  // Real-time synchronization
+  useEffect(() => {
+    if (isCloudEnabled) {
+      console.log("Inizializzazione sincronizzazione in tempo reale...");
+      const unsubscribe = libraryService.setupRealtimeSubscription(() => {
+        // We use a slight delay or debouncing if many changes happen at once
+        // but for now, direct fetch is fine for better responsiveness
+        fetchBooks(true, search);
+        fetchAbsoluteTotal();
+      });
+      return () => unsubscribe();
+    }
+  }, [isCloudEnabled, search]); // Re-subscribe if cloud status or search context changes
 
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchBooks(true, search);
-    }, 600);
+    }, 100);
     return () => clearTimeout(timer);
   }, [search, sortBy, sortOrder, filters]);
 
@@ -264,84 +291,99 @@ export default function Dashboard({
             <section className="mb-8">
               <h3 className="font-sans text-[11px] uppercase tracking-[0.2em] font-black mb-4 opacity-80 italic border-b border-editorial-text/10 pb-2">Filtri Avanzati</h3>
               <div className="space-y-5">
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 filter-dropdown">
                   <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Genere</label>
-                  <div className="group relative">
-                    <button className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between group-hover:border-editorial-text transition-colors capitalize">
+                  <div className="relative">
+                    <button 
+                      onClick={() => setOpenFilter(openFilter === 'genere' ? null : 'genere')}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between hover:border-editorial-text transition-colors capitalize"
+                    >
                       {filters.genere || "Tutti i generi"}
-                      <ChevronDown size={14} className="opacity-40" />
+                      <ChevronDown size={14} className={`opacity-40 transition-transform ${openFilter === 'genere' ? 'rotate-180' : ''}`} />
                     </button>
-                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[60] max-h-[160px] overflow-y-auto">
-                      <button 
-                        onClick={() => setFilters(prev => ({ ...prev, genere: undefined }))}
-                        className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
-                      >
-                        Tutti i generi
-                      </button>
-                      {filterOptions.generes.map(g => (
+                    {openFilter === 'genere' && (
+                      <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                         <button 
-                          key={g} 
-                          onClick={() => setFilters(prev => ({ ...prev, genere: g }))}
-                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          onClick={() => { setFilters(prev => ({ ...prev, genere: undefined })); setOpenFilter(null); }}
+                          className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
                         >
-                          {g}
+                          Tutti i generi
                         </button>
-                      ))}
-                    </div>
+                        {filterOptions.generes.map(g => (
+                          <button 
+                            key={g} 
+                            onClick={() => { setFilters(prev => ({ ...prev, genere: g })); setOpenFilter(null); }}
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          >
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 filter-dropdown">
                   <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Autore</label>
-                  <div className="group relative">
-                    <button className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between group-hover:border-editorial-text transition-colors capitalize">
+                  <div className="relative">
+                    <button 
+                      onClick={() => setOpenFilter(openFilter === 'autore' ? null : 'autore')}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between hover:border-editorial-text transition-colors capitalize"
+                    >
                       {filters.autore || "Tutti gli autori"}
-                      <ChevronDown size={14} className="opacity-40" />
+                      <ChevronDown size={14} className={`opacity-40 transition-transform ${openFilter === 'autore' ? 'rotate-180' : ''}`} />
                     </button>
-                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[60] max-h-[160px] overflow-y-auto">
-                      <button 
-                        onClick={() => setFilters(prev => ({ ...prev, autore: undefined }))}
-                        className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
-                      >
-                        Tutti gli autori
-                      </button>
-                      {filterOptions.autores.map(a => (
+                    {openFilter === 'autore' && (
+                      <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                         <button 
-                          key={a} 
-                          onClick={() => setFilters(prev => ({ ...prev, autore: a }))}
-                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          onClick={() => { setFilters(prev => ({ ...prev, autore: undefined })); setOpenFilter(null); }}
+                          className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
                         >
-                          {a}
+                          Tutti gli autori
                         </button>
-                      ))}
-                    </div>
+                        {filterOptions.autores.map(a => (
+                          <button 
+                            key={a} 
+                            onClick={() => { setFilters(prev => ({ ...prev, autore: a })); setOpenFilter(null); }}
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          >
+                            {a}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 filter-dropdown">
                   <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Editore</label>
-                  <div className="group relative">
-                    <button className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between group-hover:border-editorial-text transition-colors capitalize">
+                  <div className="relative">
+                    <button 
+                      onClick={() => setOpenFilter(openFilter === 'editore' ? null : 'editore')}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between hover:border-editorial-text transition-colors capitalize"
+                    >
                       {filters.editore || "Tutti gli editori"}
-                      <ChevronDown size={14} className="opacity-40" />
+                      <ChevronDown size={14} className={`opacity-40 transition-transform ${openFilter === 'editore' ? 'rotate-180' : ''}`} />
                     </button>
-                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[60] max-h-[160px] overflow-y-auto">
-                      <button 
-                        onClick={() => setFilters(prev => ({ ...prev, editore: undefined }))}
-                        className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
-                      >
-                        Tutti gli editori
-                      </button>
-                      {filterOptions.editores.map(ed => (
+                    {openFilter === 'editore' && (
+                      <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                         <button 
-                          key={ed} 
-                          onClick={() => setFilters(prev => ({ ...prev, editore: ed }))}
-                          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          onClick={() => { setFilters(prev => ({ ...prev, editore: undefined })); setOpenFilter(null); }}
+                          className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
                         >
-                          {ed}
+                          Tutti gli editori
                         </button>
-                      ))}
-                    </div>
+                        {filterOptions.editores.map(ed => (
+                          <button 
+                            key={ed} 
+                            onClick={() => { setFilters(prev => ({ ...prev, editore: ed })); setOpenFilter(null); }}
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          >
+                            {ed}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

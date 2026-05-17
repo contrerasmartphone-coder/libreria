@@ -458,5 +458,29 @@ export const libraryService = {
     const maxCode = Math.max(...numericCodes);
     const nextCode = Math.max(baseCode, maxCode + 1);
     return nextCode.toString();
+  },
+
+  setupRealtimeSubscription(onUpdate: () => void) {
+    if (!this.isCloudEnabled) return () => {};
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'books'
+        },
+        (payload) => {
+          console.log('Real-time change received:', payload);
+          onUpdate();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 };

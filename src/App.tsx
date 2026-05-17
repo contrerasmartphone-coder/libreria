@@ -21,7 +21,16 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(window.innerWidth >= 1024);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [fontTheme, setFontTheme] = useState<FontTheme>(() => {
     return (localStorage.getItem("library-font-theme") as FontTheme) || "serif";
@@ -269,7 +278,7 @@ export default function App() {
                 />
               </div>
               <div className="hidden sm:flex items-baseline gap-1.5 md:gap-2 font-sans text-[10px] md:text-[9px] font-bold uppercase tracking-widest opacity-80 whitespace-nowrap">
-                <span className="text-base md:text-xs text-editorial-text opacity-100 font-black leading-none">{search ? filteredCount : totalCount}</span>
+                <span className="text-base md:text-xs text-editorial-text opacity-100 font-black leading-none">{debouncedSearch ? filteredCount : totalCount}</span>
                 <span className="leading-none">Volumi</span>
               </div>
             </div>
@@ -307,7 +316,7 @@ export default function App() {
             <Dashboard 
               user={user} 
               isAdmin={!!isAuthorized} 
-              search={search} 
+              search={debouncedSearch} 
               isMenuOpen={isMenuOpen}
               setIsMenuOpen={setIsMenuOpen}
               viewMode={viewMode}

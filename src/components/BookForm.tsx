@@ -21,6 +21,7 @@ interface BookFormProps {
 
 export default function BookForm({ initialData, onClose, onSuccess, onError, onDelete, suggestions }: BookFormProps) {
   const [loading, setLoading] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState<string | null>(null);
   const [formData, setFormData] = useState<Omit<Book, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>>(
     initialData ? {
       codice: initialData.codice || "",
@@ -214,17 +215,19 @@ export default function BookForm({ initialData, onClose, onSuccess, onError, onD
                 <label className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">
                   <User size={12} className="opacity-100" /> Autore / Scrittore
                 </label>
-                <div className="relative group">
+                <div className="relative">
                   <input
                     name="autore"
                     value={formData.autore}
                     onChange={handleChange}
+                    onFocus={() => setActiveSuggestion('autore')}
+                    onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
                     className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text"
                     placeholder="Nome Autore..."
                     autoComplete="off"
                   />
-                  {suggestions?.autores && suggestions.autores.length > 0 && (
-                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                  {activeSuggestion === 'autore' && formData.autore.length >= 2 && suggestions?.autores && suggestions.autores.length > 0 && (
+                    <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-50 max-h-[150px] overflow-y-auto">
                       {suggestions.autores
                         .filter(a => !formData.autore || a.toLowerCase().includes(formData.autore.toLowerCase()))
                         .map(a => (
@@ -280,17 +283,19 @@ export default function BookForm({ initialData, onClose, onSuccess, onError, onD
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Casa Editrice</label>
-              <div className="relative group">
+              <div className="relative">
                 <input 
                   name="editore" 
                   value={formData.editore} 
                   onChange={handleChange} 
+                  onFocus={() => setActiveSuggestion('editore')}
+                  onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
                   className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" 
                   placeholder="Nome Editore..." 
                   autoComplete="off"
                 />
-                {suggestions?.editores && suggestions.editores.length > 0 && (
-                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                {activeSuggestion === 'editore' && formData.editore.length >= 2 && suggestions?.editores && suggestions.editores.length > 0 && (
+                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-50 max-h-[150px] overflow-y-auto">
                     {suggestions.editores
                       .filter(e => !formData.editore || e.toLowerCase().includes(formData.editore.toLowerCase()))
                       .map(e => (
@@ -309,17 +314,19 @@ export default function BookForm({ initialData, onClose, onSuccess, onError, onD
             </div>
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Collana Editoriale</label>
-              <div className="relative group">
+              <div className="relative">
                 <input 
                   name="collana" 
                   value={formData.collana} 
                   onChange={handleChange} 
+                  onFocus={() => setActiveSuggestion('collana')}
+                  onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
                   className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" 
                   placeholder="es. I Classici" 
                   autoComplete="off"
                 />
-                {suggestions?.collanas && suggestions.collanas.length > 0 && (
-                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                {activeSuggestion === 'collana' && formData.collana.length >= 2 && suggestions?.collanas && suggestions.collanas.length > 0 && (
+                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-50 max-h-[150px] overflow-y-auto">
                     {suggestions.collanas
                       .filter(c => !formData.collana || c.toLowerCase().includes(formData.collana.toLowerCase()))
                       .map(c => (
@@ -338,17 +345,19 @@ export default function BookForm({ initialData, onClose, onSuccess, onError, onD
             </div>
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Categoria / Genere</label>
-              <div className="relative group">
+              <div className="relative">
                 <input 
                   name="genere" 
                   value={formData.genere} 
                   onChange={handleChange} 
+                  onFocus={() => setActiveSuggestion('genere')}
+                  onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
                   className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" 
                   placeholder="es. Narrativa" 
                   autoComplete="off"
                 />
-                {suggestions?.generes && suggestions.generes.length > 0 && (
-                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                {activeSuggestion === 'genere' && formData.genere.length >= 2 && suggestions?.generes && suggestions.generes.length > 0 && (
+                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-50 max-h-[150px] overflow-y-auto">
                     {suggestions.generes
                       .filter(g => !formData.genere || g.toLowerCase().includes(formData.genere.toLowerCase()))
                       .map(g => (
@@ -371,17 +380,19 @@ export default function BookForm({ initialData, onClose, onSuccess, onError, onD
             </div>
             <div className="space-y-2">
               <label className="font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">Nazione</label>
-              <div className="relative group">
+              <div className="relative">
                 <input 
                   name="nazione" 
                   value={formData.nazione} 
                   onChange={handleChange} 
+                  onFocus={() => setActiveSuggestion('nazione')}
+                  onBlur={() => setTimeout(() => setActiveSuggestion(null), 200)}
                   className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text" 
                   placeholder="es. Italia" 
                   autoComplete="off"
                 />
-                {suggestions?.naziones && suggestions.naziones.length > 0 && (
-                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl opacity-0 invisible group-within:opacity-100 group-within:visible transition-all z-50 max-h-[150px] overflow-y-auto">
+                {activeSuggestion === 'nazione' && formData.nazione.length >= 2 && suggestions?.naziones && suggestions.naziones.length > 0 && (
+                  <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-50 max-h-[150px] overflow-y-auto">
                     {suggestions.naziones
                       .filter(n => !formData.nazione || n.toLowerCase().includes(formData.nazione.toLowerCase()))
                       .map(n => (
