@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Search, Filter, BookText, Grid, List as ListIcon, X, FileUp, Menu, ChevronLeft, LogOut, ChevronDown } from "lucide-react";
+import { Plus, Search, Filter, BookText, Grid, List as ListIcon, X, FileUp, Menu, ChevronLeft, LogOut, ChevronDown, Layers } from "lucide-react";
 import { libraryService } from "../services/libraryService";
 import { Book } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 import BookForm from "./BookForm";
 import BookCard from "./BookCard";
 import ImportModal from "./ImportModal";
+import BulkUpdateForm from "./BulkUpdateForm";
 import Toast, { ToastType } from "./Toast";
 import { cn } from "../lib/utils";
 
@@ -45,13 +46,18 @@ export default function Dashboard({
   const [quotaExceeded, setQuotaExceeded] = useState(false);
   const PAGE_SIZE = 48;
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isBulkUpdateOpen, setIsBulkUpdateOpen] = useState(false);
   const [editingBook, setEditingBook] = useState<Book | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
   // Sorting and Filtering states
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [filters, setFilters] = useState<{ autore?: string; genere?: string; editore?: string }>({});
+  const [filters, setFilters] = useState<{ autore?: string; genere?: string; editore?: string; collana?: string }>({});
+  const [filterInputs, setFilterInputs] = useState<{ autore: string; genere: string; editore: string; collana: string }>({
+    autore: "", genere: "", editore: "", collana: ""
+  });
+  
   const [filterOptions, setFilterOptions] = useState<{ 
     autores: string[], 
     generes: string[], 
@@ -63,6 +69,48 @@ export default function Dashboard({
   });
   
   const [openFilter, setOpenFilter] = useState<string | null>(null);
+
+  const handleResetField = async (field: keyof typeof filterInputs) => {
+    setFilterInputs(prev => ({ ...prev, [field]: "" }));
+    setFilters(prev => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+    
+    // Refresh global options immediately to clear search-specific suggestions
+    try {
+      const options = await libraryService.getFilterOptions();
+      setFilterOptions(options);
+    } catch (e) {
+      console.error("Errore ripristino opzioni:", e);
+    }
+  };
+
+  // Debounce suggestions fetch (don't update filters while typing)
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const filterKeys = ['autore', 'genere', 'editore', 'collana'] as const;
+      
+      for (const key of filterKeys) {
+        const val = filterInputs[key];
+        
+        // Fetch global suggestions while typing (if open)
+        if (openFilter === key && val.length >= 3) {
+          try {
+            const globalSuggestions = await libraryService.searchFieldSuggestions(key, val);
+            setFilterOptions(prev => ({
+              ...prev,
+              [`${key}s`]: globalSuggestions
+            }));
+          } catch (e) {
+            console.error(`Error fetching suggestions for ${key}:`, e);
+          }
+        }
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [filterInputs, openFilter]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -122,7 +170,18 @@ export default function Dashboard({
   const loadFilterOptions = async () => {
     try {
       const options = await libraryService.getFilterOptions();
-      setFilterOptions(options);
+      setFilterOptions(prev => {
+        const merged = { ...options };
+        // If there's an active search with suggestions, preserve those suggestions
+        // to avoid they "disappear" when global options are refreshed
+        if (openFilter) {
+          const key = `${openFilter}s` as keyof typeof prev;
+          if (filterInputs[openFilter as keyof typeof filterInputs].length >= 3) {
+            merged[key] = prev[key] as any;
+          }
+        }
+        return merged;
+      });
     } catch (e) {
       console.error("Errore caricamento opzioni filtro:", e);
     }
@@ -211,7 +270,7 @@ export default function Dashboard({
       try {
         await libraryService.deleteBook(id);
         showToast("Volume eliminato definitivamente");
-        fetchBooks();
+        fetchBooks(true, search);
       } catch (e) {
         showToast("Impossibile eliminare il volume", "error");
       }
@@ -294,25 +353,50 @@ export default function Dashboard({
                 <div className="flex flex-col gap-1 filter-dropdown">
                   <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Genere</label>
                   <div className="relative">
-                    <button 
-                      onClick={() => setOpenFilter(openFilter === 'genere' ? null : 'genere')}
-                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between hover:border-editorial-text transition-colors capitalize"
-                    >
-                      {filters.genere || "Tutti i generi"}
-                      <ChevronDown size={14} className={`opacity-40 transition-transform ${openFilter === 'genere' ? 'rotate-180' : ''}`} />
-                    </button>
-                    {openFilter === 'genere' && (
+                    <input 
+                      type="text"
+                      placeholder="Cerca genere..."
+                      value={filterInputs.genere}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFilterInputs(prev => ({ ...prev, genere: val }));
+                        if (val.length >= 3) {
+                          setOpenFilter('genere');
+                        } else {
+                          setOpenFilter(null);
+                          if (val === "") {
+                            setFilters(prev => {
+                              const next = { ...prev };
+                              delete next.genere;
+                              return next;
+                            });
+                          }
+                        }
+                      }}
+                      onFocus={() => {
+                        if (filterInputs.genere.length >= 3) setOpenFilter('genere');
+                      }}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
+                      autoComplete="off"
+                    />
+                    {openFilter === 'genere' && filterInputs.genere.length >= 3 && (
                       <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                         <button 
-                          onClick={() => { setFilters(prev => ({ ...prev, genere: undefined })); setOpenFilter(null); }}
-                          className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                          onClick={() => handleResetField('genere')}
+                          className="w-full text-left px-4 py-2.5 text-[10px] font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
                         >
                           Tutti i generi
                         </button>
-                        {filterOptions.generes.map(g => (
+                        {filterOptions.generes
+                          .filter(g => !filterInputs.genere || g.toLowerCase().includes(filterInputs.genere.toLowerCase()))
+                          .map(g => (
                           <button 
                             key={g} 
-                            onClick={() => { setFilters(prev => ({ ...prev, genere: g })); setOpenFilter(null); }}
+                            onClick={() => { 
+                              setFilterInputs(prev => ({ ...prev, genere: g })); 
+                              setFilters(prev => ({ ...prev, genere: g }));
+                              setOpenFilter(null); 
+                            }}
                             className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
                           >
                             {g}
@@ -326,25 +410,50 @@ export default function Dashboard({
                 <div className="flex flex-col gap-1 filter-dropdown">
                   <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Autore</label>
                   <div className="relative">
-                    <button 
-                      onClick={() => setOpenFilter(openFilter === 'autore' ? null : 'autore')}
-                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between hover:border-editorial-text transition-colors capitalize"
-                    >
-                      {filters.autore || "Tutti gli autori"}
-                      <ChevronDown size={14} className={`opacity-40 transition-transform ${openFilter === 'autore' ? 'rotate-180' : ''}`} />
-                    </button>
-                    {openFilter === 'autore' && (
+                    <input 
+                      type="text"
+                      placeholder="Cerca autore..."
+                      value={filterInputs.autore}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFilterInputs(prev => ({ ...prev, autore: val }));
+                        if (val.length >= 3) {
+                          setOpenFilter('autore');
+                        } else {
+                          setOpenFilter(null);
+                          if (val === "") {
+                            setFilters(prev => {
+                              const next = { ...prev };
+                              delete next.autore;
+                              return next;
+                            });
+                          }
+                        }
+                      }}
+                      onFocus={() => {
+                        if (filterInputs.autore.length >= 3) setOpenFilter('autore');
+                      }}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
+                      autoComplete="off"
+                    />
+                    {openFilter === 'autore' && filterInputs.autore.length >= 3 && (
                       <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                         <button 
-                          onClick={() => { setFilters(prev => ({ ...prev, autore: undefined })); setOpenFilter(null); }}
-                          className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                          onClick={() => handleResetField('autore')}
+                          className="w-full text-left px-4 py-2.5 text-[10px] font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
                         >
                           Tutti gli autori
                         </button>
-                        {filterOptions.autores.map(a => (
+                        {filterOptions.autores
+                          .filter(a => !filterInputs.autore || a.toLowerCase().includes(filterInputs.autore.toLowerCase()))
+                          .map(a => (
                           <button 
                             key={a} 
-                            onClick={() => { setFilters(prev => ({ ...prev, autore: a })); setOpenFilter(null); }}
+                            onClick={() => { 
+                              setFilterInputs(prev => ({ ...prev, autore: a })); 
+                              setFilters(prev => ({ ...prev, autore: a }));
+                              setOpenFilter(null); 
+                            }}
                             className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
                           >
                             {a}
@@ -358,28 +467,110 @@ export default function Dashboard({
                 <div className="flex flex-col gap-1 filter-dropdown">
                   <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Editore</label>
                   <div className="relative">
-                    <button 
-                      onClick={() => setOpenFilter(openFilter === 'editore' ? null : 'editore')}
-                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base flex items-center justify-between hover:border-editorial-text transition-colors capitalize"
-                    >
-                      {filters.editore || "Tutti gli editori"}
-                      <ChevronDown size={14} className={`opacity-40 transition-transform ${openFilter === 'editore' ? 'rotate-180' : ''}`} />
-                    </button>
-                    {openFilter === 'editore' && (
+                    <input 
+                      type="text"
+                      placeholder="Cerca editore..."
+                      value={filterInputs.editore}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFilterInputs(prev => ({ ...prev, editore: val }));
+                        if (val.length >= 3) {
+                          setOpenFilter('editore');
+                        } else {
+                          setOpenFilter(null);
+                          if (val === "") {
+                            setFilters(prev => {
+                              const next = { ...prev };
+                              delete next.editore;
+                              return next;
+                            });
+                          }
+                        }
+                      }}
+                      onFocus={() => {
+                        if (filterInputs.editore.length >= 3) setOpenFilter('editore');
+                      }}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
+                      autoComplete="off"
+                    />
+                    {openFilter === 'editore' && filterInputs.editore.length >= 3 && (
                       <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                         <button 
-                          onClick={() => { setFilters(prev => ({ ...prev, editore: undefined })); setOpenFilter(null); }}
-                          className="w-full text-left px-4 py-2.5 text-xs font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                          onClick={() => handleResetField('editore')}
+                          className="w-full text-left px-4 py-2.5 text-[10px] font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
                         >
                           Tutti gli editori
                         </button>
-                        {filterOptions.editores.map(ed => (
+                        {filterOptions.editores
+                          .filter(e => !filterInputs.editore || e.toLowerCase().includes(filterInputs.editore.toLowerCase()))
+                          .map(e => (
                           <button 
-                            key={ed} 
-                            onClick={() => { setFilters(prev => ({ ...prev, editore: ed })); setOpenFilter(null); }}
+                            key={e} 
+                            onClick={() => { 
+                              setFilterInputs(prev => ({ ...prev, editore: e })); 
+                              setFilters(prev => ({ ...prev, editore: e }));
+                              setOpenFilter(null); 
+                            }}
                             className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
                           >
-                            {ed}
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1 filter-dropdown">
+                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Collana</label>
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      placeholder="Cerca collana..."
+                      value={filterInputs.collana}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFilterInputs(prev => ({ ...prev, collana: val }));
+                        if (val.length >= 3) {
+                          setOpenFilter('collana');
+                        } else {
+                          setOpenFilter(null);
+                          if (val === "") {
+                            setFilters(prev => {
+                              const next = { ...prev };
+                              delete next.collana;
+                              return next;
+                            });
+                          }
+                        }
+                      }}
+                      onFocus={() => {
+                        if (filterInputs.collana.length >= 3) setOpenFilter('collana');
+                      }}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
+                      autoComplete="off"
+                    />
+                    {openFilter === 'collana' && filterInputs.collana.length >= 3 && (
+                      <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                        <button 
+                          onClick={() => handleResetField('collana')}
+                          className="w-full text-left px-4 py-2.5 text-[10px] font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                        >
+                          Tutte le collane
+                        </button>
+                        {filterOptions.collanas
+                          .filter(c => !filterInputs.collana || c.toLowerCase().includes(filterInputs.collana.toLowerCase()))
+                          .map(c => (
+                          <button 
+                            key={c} 
+                            onClick={() => { 
+                              setFilterInputs(prev => ({ ...prev, collana: c })); 
+                              setFilters(prev => ({ ...prev, collana: c }));
+                              setOpenFilter(null); 
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          >
+                            {c}
                           </button>
                         ))}
                       </div>
@@ -388,12 +579,26 @@ export default function Dashboard({
                 </div>
 
                 {Object.values(filters).some(Boolean) && (
-                  <button 
-                    onClick={() => setFilters({})}
-                    className="font-sans text-[11px] font-black uppercase tracking-widest text-red-700 hover:text-red-900 transition-colors flex items-center gap-2 mt-2"
-                  >
-                    <X size={12} /> Resetta filtri
-                  </button>
+                  <div className="space-y-3 mt-4 pt-4 border-t border-editorial-text/5">
+                    <button 
+                      onClick={() => {
+                        setFilters({});
+                        setFilterInputs({ autore: "", genere: "", editore: "", collana: "" });
+                        loadFilterOptions();
+                      }}
+                      className="font-sans text-[11px] font-black uppercase tracking-widest text-red-700 hover:text-red-900 transition-colors flex items-center gap-2"
+                    >
+                      <X size={12} /> Resetta filtri
+                    </button>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => setIsBulkUpdateOpen(true)}
+                        className="font-sans text-[11px] font-black uppercase tracking-widest text-blue-800 hover:text-blue-950 transition-colors flex items-center gap-2"
+                      >
+                        <Layers size={12} /> Aggiorna gruppo
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </section>
@@ -525,7 +730,7 @@ export default function Dashboard({
             onSuccess={() => {
               setIsImportOpen(false);
               showToast("Dati importati con successo");
-              fetchBooks();
+              fetchBooks(true, search);
             }}
           />
         )}
@@ -565,12 +770,31 @@ export default function Dashboard({
                      setIsFormOpen(false);
                      setEditingBook(undefined);
                      showToast(editingBook ? "Volume aggiornato correttamente" : "Nuovo volume registrato");
-                     fetchBooks();
+                     fetchBooks(true, search);
                    }}
                 />
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isBulkUpdateOpen && (
+          <BulkUpdateForm
+            filters={filters}
+            searchTerm={search}
+            totalCount={totalFilteredBooks}
+            onClose={() => setIsBulkUpdateOpen(false)}
+            onSuccess={(count) => {
+              showToast(`Aggiornati ${count} volumi con successo`);
+              setFilters({});
+              setFilterInputs({ autore: "", genere: "", editore: "", collana: "" });
+              loadFilterOptions();
+              fetchBooks(true, search);
+            }}
+            onError={(msg) => showToast(msg, "error")}
+          />
         )}
       </AnimatePresence>
 

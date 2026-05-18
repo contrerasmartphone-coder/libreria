@@ -255,7 +255,7 @@ export const libraryService = {
     searchTerm?: string,
     sortBy: string = 'created_at',
     sortOrder: 'asc' | 'desc' = 'desc',
-    filters: { autore?: string; genere?: string; editore?: string } = {}
+    filters: { autore?: string; genere?: string; editore?: string; collana?: string } = {}
   ): Promise<{ books: Book[], total: number }> {
     if (this.isCloudEnabled) {
       const user = await this.getCurrentUser();
@@ -271,9 +271,10 @@ export const libraryService = {
       }
 
       // Add specific filters
-      if (filters.autore) query = query.eq('autore', filters.autore);
-      if (filters.genere) query = query.eq('genere', filters.genere);
-      if (filters.editore) query = query.eq('editore', filters.editore);
+      if (filters.autore) query = query.ilike('autore', `%${filters.autore}%`);
+      if (filters.genere) query = query.ilike('genere', `%${filters.genere}%`);
+      if (filters.editore) query = query.ilike('editore', `%${filters.editore}%`);
+      if (filters.collana) query = query.ilike('collana', `%${filters.collana}%`);
 
       const from = page * pageSize;
       const to = from + pageSize - 1;
@@ -306,9 +307,10 @@ export const libraryService = {
     }
 
     // Specific filters
-    if (filters.autore) books = books.filter(b => b.autore === filters.autore);
-    if (filters.genere) books = books.filter(b => b.genere === filters.genere);
-    if (filters.editore) books = books.filter(b => b.editore === filters.editore);
+    if (filters.autore) books = books.filter(b => b.autore?.toLowerCase().includes(filters.autore!.toLowerCase()));
+    if (filters.genere) books = books.filter(b => b.genere?.toLowerCase().includes(filters.genere!.toLowerCase()));
+    if (filters.editore) books = books.filter(b => b.editore?.toLowerCase().includes(filters.editore!.toLowerCase()));
+    if (filters.collana) books = books.filter(b => b.collana?.toLowerCase().includes(filters.collana!.toLowerCase()));
 
     // Sorting
     books.sort((a, b) => {
@@ -329,24 +331,30 @@ export const libraryService = {
 
   async getFilterOptions(): Promise<{ autores: string[], generes: string[], editores: string[], collanas: string[], naziones: string[] }> {
     if (this.isCloudEnabled) {
-      const { data, error } = await supabase
-        .from('books')
-        .select('autore, genere, editore, collana, nazione');
+      // Fetch each field separately to get more unique values across the entire database
+      const fields = ['autore', 'genere', 'editore', 'collana', 'nazione'];
+      const results = await Promise.all(
+        fields.map(field => 
+          supabase
+            .from('books')
+            .select(field)
+            .not(field, 'is', null)
+            .order(field)
+            .range(0, 3000)
+        )
+      );
       
-      if (error) return { autores: [], generes: [], editores: [], collanas: [], naziones: [] };
+      const [autoresData, generesData, editoresData, collanasData, nazionesData] = results;
       
-      const autores = Array.from(new Set(data.map(i => i.autore).filter(Boolean))) as string[];
-      const generes = Array.from(new Set(data.map(i => i.genere).filter(Boolean))) as string[];
-      const editores = Array.from(new Set(data.map(i => i.editore).filter(Boolean))) as string[];
-      const collanas = Array.from(new Set(data.map(i => i.collana).filter(Boolean))) as string[];
-      const naziones = Array.from(new Set(data.map(i => i.nazione).filter(Boolean))) as string[];
-      
+      const extractUnique = (res: any, field: string) => 
+        Array.from(new Set((res.data || []).map((i: any) => i[field]).filter(Boolean))) as string[];
+
       return { 
-        autores: autores.sort(), 
-        generes: generes.sort(), 
-        editores: editores.sort(),
-        collanas: collanas.sort(),
-        naziones: naziones.sort()
+        autores: extractUnique(autoresData, 'autore').sort(), 
+        generes: extractUnique(generesData, 'genere').sort(), 
+        editores: extractUnique(editoresData, 'editore').sort(),
+        collanas: extractUnique(collanasData, 'collana').sort(),
+        naziones: extractUnique(nazionesData, 'nazione').sort()
       };
     }
     
@@ -458,6 +466,83 @@ export const libraryService = {
     const maxCode = Math.max(...numericCodes);
     const nextCode = Math.max(baseCode, maxCode + 1);
     return nextCode.toString();
+  },
+
+  async searchFieldSuggestions(field: string, searchTerm: string): Promise<string[]> {
+    if (this.isCloudEnabled) {
+      const { data, error } = await supabase
+        .from('books')
+        .select(field)
+        .ilike(field, `%${searchTerm}%`)
+        .order(field)
+        .range(0, 5000); // Fetch a larger range to get more unique values
+      
+      if (error) return [];
+      return Array.from(new Set(data.map(i => (i as any)[field]).filter(Boolean))) as string[];
+    }
+
+    const books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+    const results = Array.from(new Set(books.map(i => (i as any)[field]).filter(Boolean))) as string[];
+    return results.filter(val => val.toLowerCase().includes(searchTerm.toLowerCase())).sort();
+  },
+
+  async bulkUpdateBooks(
+    filters: { autore?: string; genere?: string; editore?: string; collana?: string },
+    searchTerm: string,
+    field: string,
+    value: any
+  ): Promise<number> {
+    if (this.isCloudEnabled) {
+      const dbUpdates = this.mapBookToDb({ [field]: value });
+      dbUpdates.updated_at = new Date().toISOString();
+
+      let query = supabase.from('books').update(dbUpdates);
+      
+      // Apply filters
+      if (searchTerm && searchTerm.trim() !== "") {
+        const term = `%${searchTerm.trim()}%`;
+        query = query.or(`titolo.ilike.${term},autore.ilike.${term},codice.ilike.${term}`);
+      }
+      if (filters.autore) query = query.ilike('autore', `%${filters.autore}%`);
+      if (filters.genere) query = query.ilike('genere', `%${filters.genere}%`);
+      if (filters.editore) query = query.ilike('editore', `%${filters.editore}%`);
+      if (filters.collana) query = query.ilike('collana', `%${filters.collana}%`);
+
+      const { data, error } = await query.select('codice');
+      if (error) throw error;
+      return data ? data.length : 0;
+    }
+
+    // Local implementation
+    let books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+    
+    // Apply search filter
+    if (searchTerm && searchTerm.trim() !== "") {
+      const term = searchTerm.toLowerCase().trim();
+      books = books.filter(b => 
+        b.titolo?.toLowerCase().includes(term) || 
+        b.autore?.toLowerCase().includes(term) || 
+        b.codice?.toLowerCase().includes(term)
+      );
+    }
+
+    // Apply specific filters
+    if (filters.autore) books = books.filter(b => b.autore?.toLowerCase().includes(filters.autore!.toLowerCase()));
+    if (filters.genere) books = books.filter(b => b.genere?.toLowerCase().includes(filters.genere!.toLowerCase()));
+    if (filters.editore) books = books.filter(b => b.editore?.toLowerCase().includes(filters.editore!.toLowerCase()));
+    if (filters.collana) books = books.filter(b => b.collana?.toLowerCase().includes(filters.collana!.toLowerCase()));
+
+    const idsToUpdate = new Set(books.map(b => b.id));
+    const allBooks = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+    const updatedBooks = allBooks.map(b => {
+      if (idsToUpdate.has(b.id)) {
+        return { ...b, [field]: value, updatedAt: new Date().toISOString() };
+      }
+      return b;
+    });
+
+    saveLocalData(LOCAL_STORAGE_KEYS.BOOKS, updatedBooks);
+    return idsToUpdate.size;
   },
 
   setupRealtimeSubscription(onUpdate: () => void) {
