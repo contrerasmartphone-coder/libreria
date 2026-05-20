@@ -23,6 +23,7 @@ interface DashboardProps {
   useLocalMode: boolean;
   onLogout: () => void;
   onCountsChange: (total: number, filtered: number) => void;
+  onFiltersApplied?: (filters: any, sortBy: string, sortOrder: "asc" | "desc") => void;
 }
 
 export default function Dashboard({ 
@@ -36,7 +37,8 @@ export default function Dashboard({
   setIsFormOpen,
   useLocalMode,
   onLogout,
-  onCountsChange
+  onCountsChange,
+  onFiltersApplied
 }: DashboardProps) {
   const [books, setBooks] = useState<Book[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
@@ -53,9 +55,9 @@ export default function Dashboard({
   // Sorting and Filtering states
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [filters, setFilters] = useState<{ autore?: string; genere?: string; editore?: string; collana?: string }>({});
-  const [filterInputs, setFilterInputs] = useState<{ autore: string; genere: string; editore: string; collana: string }>({
-    autore: "", genere: "", editore: "", collana: ""
+  const [filters, setFilters] = useState<{ autore?: string; genere?: string; editore?: string; collana?: string; scaffale?: string; nazione?: string }>({});
+  const [filterInputs, setFilterInputs] = useState<{ autore: string; genere: string; editore: string; collana: string; scaffale: string; nazione: string }>({
+    autore: "", genere: "", editore: "", collana: "", scaffale: "", nazione: ""
   });
   
   const [filterOptions, setFilterOptions] = useState<{ 
@@ -63,9 +65,10 @@ export default function Dashboard({
     generes: string[], 
     editores: string[],
     collanas: string[],
-    naziones: string[]
+    naziones: string[],
+    scaffales: string[]
   }>({
-    autores: [], generes: [], editores: [], collanas: [], naziones: []
+    autores: [], generes: [], editores: [], collanas: [], naziones: [], scaffales: []
   });
   
   const [openFilter, setOpenFilter] = useState<string | null>(null);
@@ -90,7 +93,7 @@ export default function Dashboard({
   // Debounce suggestions fetch (don't update filters while typing)
   useEffect(() => {
     const timer = setTimeout(async () => {
-      const filterKeys = ['autore', 'genere', 'editore', 'collana'] as const;
+      const filterKeys = ['autore', 'genere', 'editore', 'collana', 'scaffale', 'nazione'] as const;
       
       for (const key of filterKeys) {
         const val = filterInputs[key];
@@ -156,6 +159,10 @@ export default function Dashboard({
     }, 100);
     return () => clearTimeout(timer);
   }, [search, sortBy, sortOrder, filters]);
+
+  useEffect(() => {
+    onFiltersApplied?.(filters, sortBy, sortOrder);
+  }, [filters, sortBy, sortOrder, onFiltersApplied]);
 
   useEffect(() => {
     loadFilterOptions();
@@ -578,12 +585,126 @@ export default function Dashboard({
                   </div>
                 </div>
 
+                <div className="flex flex-col gap-1 filter-dropdown">
+                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Collocazione (Scaffale)</label>
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      placeholder="Cerca scaffale..."
+                      value={filterInputs.scaffale}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFilterInputs(prev => ({ ...prev, scaffale: val }));
+                        if (val.length >= 3) {
+                          setOpenFilter('scaffale');
+                        } else {
+                          setOpenFilter(null);
+                          if (val === "") {
+                            setFilters(prev => {
+                              const next = { ...prev };
+                              delete next.scaffale;
+                              return next;
+                            });
+                          }
+                        }
+                      }}
+                      onFocus={() => {
+                        if (filterInputs.scaffale.length >= 3) setOpenFilter('scaffale');
+                      }}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
+                      autoComplete="off"
+                    />
+                    {openFilter === 'scaffale' && filterInputs.scaffale.length >= 3 && (
+                      <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                        <button 
+                          onClick={() => handleResetField('scaffale')}
+                          className="w-full text-left px-4 py-2.5 text-[10px] font-black border-b border-editorial-text/5 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                        >
+                          Tutte le collocazioni
+                        </button>
+                        {filterOptions.scaffales
+                          ?.filter(s => !filterInputs.scaffale || s.toLowerCase().includes(filterInputs.scaffale.toLowerCase()))
+                          .map(s => (
+                          <button 
+                            key={s} 
+                            onClick={() => { 
+                              setFilterInputs(prev => ({ ...prev, scaffale: s })); 
+                              setFilters(prev => ({ ...prev, scaffale: s }));
+                              setOpenFilter(null); 
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1 filter-dropdown">
+                  <label className="font-sans text-[10px] uppercase tracking-widest font-black opacity-100 mb-1">Nazione</label>
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      placeholder="Cerca nazione..."
+                      value={filterInputs.nazione}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFilterInputs(prev => ({ ...prev, nazione: val }));
+                        if (val.length >= 3) {
+                          setOpenFilter('nazione');
+                        } else {
+                          setOpenFilter(null);
+                          if (val === "") {
+                            setFilters(prev => {
+                              const next = { ...prev };
+                              delete next.nazione;
+                              return next;
+                            });
+                          }
+                        }
+                      }}
+                      onFocus={() => {
+                        if (filterInputs.nazione.length >= 3) setOpenFilter('nazione');
+                      }}
+                      className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
+                      autoComplete="off"
+                    />
+                    {openFilter === 'nazione' && filterInputs.nazione.length >= 3 && (
+                      <div className="absolute top-full left-0 w-full bg-white border border-editorial-text/10 shadow-2xl z-[100] max-h-[160px] overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                        <button 
+                          onClick={() => handleResetField('nazione')}
+                          className="w-full text-left px-4 py-2.5 text-[10px] font-black border-b border-editorial-text/10 hover:bg-neutral-100 uppercase tracking-widest bg-neutral-50/50"
+                        >
+                          Tutte le nazioni
+                        </button>
+                        {filterOptions.naziones
+                          ?.filter(n => !filterInputs.nazione || n.toLowerCase().includes(filterInputs.nazione.toLowerCase()))
+                          .map(n => (
+                          <button 
+                            key={n} 
+                            onClick={() => { 
+                              setFilterInputs(prev => ({ ...prev, nazione: n })); 
+                              setFilters(prev => ({ ...prev, nazione: n }));
+                              setOpenFilter(null); 
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 transition-colors border-b border-editorial-text/5 last:border-none"
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {Object.values(filters).some(Boolean) && (
                   <div className="space-y-3 mt-4 pt-4 border-t border-editorial-text/5">
                     <button 
                       onClick={() => {
                         setFilters({});
-                        setFilterInputs({ autore: "", genere: "", editore: "", collana: "" });
+                        setFilterInputs({ autore: "", genere: "", editore: "", collana: "", scaffale: "", nazione: "" });
                         loadFilterOptions();
                       }}
                       className="font-sans text-[11px] font-black uppercase tracking-widest text-red-700 hover:text-red-900 transition-colors flex items-center gap-2"

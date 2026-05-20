@@ -255,7 +255,7 @@ export const libraryService = {
     searchTerm?: string,
     sortBy: string = 'created_at',
     sortOrder: 'asc' | 'desc' = 'desc',
-    filters: { autore?: string; genere?: string; editore?: string; collana?: string } = {}
+    filters: { autore?: string; genere?: string; editore?: string; collana?: string; scaffale?: string; nazione?: string } = {}
   ): Promise<{ books: Book[], total: number }> {
     if (this.isCloudEnabled) {
       const user = await this.getCurrentUser();
@@ -275,6 +275,8 @@ export const libraryService = {
       if (filters.genere) query = query.ilike('genere', `%${filters.genere}%`);
       if (filters.editore) query = query.ilike('editore', `%${filters.editore}%`);
       if (filters.collana) query = query.ilike('collana', `%${filters.collana}%`);
+      if (filters.scaffale) query = query.ilike('scaffale', `%${filters.scaffale}%`);
+      if (filters.nazione) query = query.ilike('nazione', `%${filters.nazione}%`);
 
       const from = page * pageSize;
       const to = from + pageSize - 1;
@@ -311,6 +313,8 @@ export const libraryService = {
     if (filters.genere) books = books.filter(b => b.genere?.toLowerCase().includes(filters.genere!.toLowerCase()));
     if (filters.editore) books = books.filter(b => b.editore?.toLowerCase().includes(filters.editore!.toLowerCase()));
     if (filters.collana) books = books.filter(b => b.collana?.toLowerCase().includes(filters.collana!.toLowerCase()));
+    if (filters.scaffale) books = books.filter(b => b.scaffale?.toLowerCase().includes(filters.scaffale!.toLowerCase()));
+    if (filters.nazione) books = books.filter(b => b.nazione?.toLowerCase().includes(filters.nazione!.toLowerCase()));
 
     // Sorting
     books.sort((a, b) => {
@@ -329,10 +333,76 @@ export const libraryService = {
     return { books: paginatedBooks, total };
   },
 
-  async getFilterOptions(): Promise<{ autores: string[], generes: string[], editores: string[], collanas: string[], naziones: string[] }> {
+  async getAllFilteredBooks(
+    searchTerm?: string,
+    sortBy: string = 'created_at',
+    sortOrder: 'asc' | 'desc' = 'desc',
+    filters: { autore?: string; genere?: string; editore?: string; collana?: string; scaffale?: string; nazione?: string } = {}
+  ): Promise<Book[]> {
+    if (this.isCloudEnabled) {
+      let query = supabase.from('books').select('*');
+      
+      if (searchTerm && searchTerm.trim() !== "") {
+        const term = `%${searchTerm.trim()}%`;
+        query = query.or(`titolo.ilike.${term},autore.ilike.${term},codice.ilike.${term}`);
+      }
+
+      // Add specific filters
+      if (filters.autore) query = query.ilike('autore', `%${filters.autore}%`);
+      if (filters.genere) query = query.ilike('genere', `%${filters.genere}%`);
+      if (filters.editore) query = query.ilike('editore', `%${filters.editore}%`);
+      if (filters.collana) query = query.ilike('collana', `%${filters.collana}%`);
+      if (filters.scaffale) query = query.ilike('scaffale', `%${filters.scaffale}%`);
+      if (filters.nazione) query = query.ilike('nazione', `%${filters.nazione}%`);
+
+      const { data, error } = await query
+        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .range(0, 10000); // Fetch all filtered items up to a high limit
+      
+      if (error) {
+        console.error("Errore recupero tutti i libri filtrati Cloud:", error);
+        throw new Error(`Errore lettura libri: ${error.message}`);
+      }
+
+      return (data || []).map(b => this.mapDbToBook(b));
+    }
+
+    let books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+    
+    // Search filter
+    if (searchTerm && searchTerm.trim() !== "") {
+      const term = searchTerm.toLowerCase().trim();
+      books = books.filter(b => 
+        b.titolo?.toLowerCase().includes(term) || 
+        b.autore?.toLowerCase().includes(term) || 
+        b.codice?.toLowerCase().includes(term)
+      );
+    }
+
+    // Specific filters
+    if (filters.autore) books = books.filter(b => b.autore?.toLowerCase().includes(filters.autore!.toLowerCase()));
+    if (filters.genere) books = books.filter(b => b.genere?.toLowerCase().includes(filters.genere!.toLowerCase()));
+    if (filters.editore) books = books.filter(b => b.editore?.toLowerCase().includes(filters.editore!.toLowerCase()));
+    if (filters.collana) books = books.filter(b => b.collana?.toLowerCase().includes(filters.collana!.toLowerCase()));
+    if (filters.scaffale) books = books.filter(b => b.scaffale?.toLowerCase().includes(filters.scaffale!.toLowerCase()));
+    if (filters.nazione) books = books.filter(b => b.nazione?.toLowerCase().includes(filters.nazione!.toLowerCase()));
+
+    // Sorting
+    books.sort((a, b) => {
+      const valA = (a as any)[sortBy] || "";
+      const valB = (b as any)[sortBy] || "";
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+    
+    return books;
+  },
+
+  async getFilterOptions(): Promise<{ autores: string[], generes: string[], editores: string[], collanas: string[], naziones: string[], scaffales: string[] }> {
     if (this.isCloudEnabled) {
       // Fetch each field separately to get more unique values across the entire database
-      const fields = ['autore', 'genere', 'editore', 'collana', 'nazione'];
+      const fields = ['autore', 'genere', 'editore', 'collana', 'nazione', 'scaffale'];
       const results = await Promise.all(
         fields.map(field => 
           supabase
@@ -344,7 +414,7 @@ export const libraryService = {
         )
       );
       
-      const [autoresData, generesData, editoresData, collanasData, nazionesData] = results;
+      const [autoresData, generesData, editoresData, collanasData, nazionesData, scaffalesData] = results;
       
       const extractUnique = (res: any, field: string) => 
         Array.from(new Set((res.data || []).map((i: any) => i[field]).filter(Boolean))) as string[];
@@ -354,7 +424,8 @@ export const libraryService = {
         generes: extractUnique(generesData, 'genere').sort(), 
         editores: extractUnique(editoresData, 'editore').sort(),
         collanas: extractUnique(collanasData, 'collana').sort(),
-        naziones: extractUnique(nazionesData, 'nazione').sort()
+        naziones: extractUnique(nazionesData, 'nazione').sort(),
+        scaffales: extractUnique(scaffalesData, 'scaffale').sort()
       };
     }
     
@@ -364,13 +435,15 @@ export const libraryService = {
     const editores = Array.from(new Set(books.map(i => i.editore).filter(Boolean))) as string[];
     const collanas = Array.from(new Set(books.map(i => i.collana).filter(Boolean))) as string[];
     const naziones = Array.from(new Set(books.map(i => i.nazione).filter(Boolean))) as string[];
+    const scaffales = Array.from(new Set(books.map(i => i.scaffale).filter(Boolean))) as string[];
     
     return { 
       autores: autores.sort(), 
       generes: generes.sort(), 
       editores: editores.sort(),
       collanas: collanas.sort(),
-      naziones: naziones.sort()
+      naziones: naziones.sort(),
+      scaffales: scaffales.sort()
     };
   },
 
@@ -487,7 +560,7 @@ export const libraryService = {
   },
 
   async bulkUpdateBooks(
-    filters: { autore?: string; genere?: string; editore?: string; collana?: string },
+    filters: { autore?: string; genere?: string; editore?: string; collana?: string; scaffale?: string; nazione?: string },
     searchTerm: string,
     field: string,
     value: any
@@ -507,6 +580,8 @@ export const libraryService = {
       if (filters.genere) query = query.ilike('genere', `%${filters.genere}%`);
       if (filters.editore) query = query.ilike('editore', `%${filters.editore}%`);
       if (filters.collana) query = query.ilike('collana', `%${filters.collana}%`);
+      if (filters.scaffale) query = query.ilike('scaffale', `%${filters.scaffale}%`);
+      if (filters.nazione) query = query.ilike('nazione', `%${filters.nazione}%`);
 
       const { data, error } = await query.select('codice');
       if (error) throw error;
@@ -531,6 +606,8 @@ export const libraryService = {
     if (filters.genere) books = books.filter(b => b.genere?.toLowerCase().includes(filters.genere!.toLowerCase()));
     if (filters.editore) books = books.filter(b => b.editore?.toLowerCase().includes(filters.editore!.toLowerCase()));
     if (filters.collana) books = books.filter(b => b.collana?.toLowerCase().includes(filters.collana!.toLowerCase()));
+    if (filters.scaffale) books = books.filter(b => b.scaffale?.toLowerCase().includes(filters.scaffale!.toLowerCase()));
+    if (filters.nazione) books = books.filter(b => b.nazione?.toLowerCase().includes(filters.nazione!.toLowerCase()));
 
     const idsToUpdate = new Set(books.map(b => b.id));
     const allBooks = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);

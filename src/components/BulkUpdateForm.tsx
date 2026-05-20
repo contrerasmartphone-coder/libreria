@@ -4,7 +4,7 @@ import { X, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { libraryService } from '../services/libraryService';
 
 interface BulkUpdateFormProps {
-  filters: { autore?: string; genere?: string; editore?: string; collana?: string };
+  filters: { autore?: string; genere?: string; editore?: string; collana?: string; scaffale?: string; nazione?: string };
   searchTerm: string;
   totalCount: number;
   onClose: () => void;
