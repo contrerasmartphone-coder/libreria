@@ -5,7 +5,7 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import Dashboard from "./components/Dashboard";
-import { BookOpen, LogIn, LogOut, Library, ShieldAlert, Search, Menu, ChevronLeft, Grid, List as ListIcon, Plus, Type, Printer, X } from "lucide-react";
+import { BookOpen, LogIn, LogOut, Library, ShieldAlert, Search, Menu, ChevronLeft, Grid, List as ListIcon, Plus, Type, Printer, X, HelpCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { libraryService } from "./services/libraryService";
 import { supabase } from "./lib/supabase";
@@ -44,6 +44,8 @@ export default function App() {
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [activeHelpSection, setActiveHelpSection] = useState("intro");
   const [printBooks, setPrintBooks] = useState<any[]>([]);
   const [loadingPrintBooks, setLoadingPrintBooks] = useState(false);
   const [orientation, setOrientation] = useState<"portrait" | "landscape">("portrait");
@@ -553,6 +555,15 @@ export default function App() {
                 <Printer size={20} className="md:w-3.5 md:h-3.5" />
                 <span className="font-sans text-[9px] font-black uppercase tracking-widest">Stampa</span>
               </button>
+
+              <button
+                onClick={() => setIsHelpOpen(true)}
+                className="p-3 md:p-1.5 border border-editorial-text/10 hover:bg-black/5 text-editorial-text font-serif font-bold transition-all rounded-sm flex items-center justify-center"
+                title="Guida Operativa"
+                id="guide-operatoria-btn"
+              >
+                <span className="text-[17px] md:text-[13px] w-5 h-5 md:w-3.5 md:h-3.5 flex items-center justify-center leading-none select-none font-black">?</span>
+              </button>
               
               {!isMenuOpen && (
                 <button
@@ -772,10 +783,10 @@ export default function App() {
                             <span className="text-[10px] tracking-widest uppercase font-black">Nessun libro corrisponde ai filtri</span>
                           </div>
                         ) : (
-                          <div className={`bg-white shadow-xl p-8 mx-auto text-black border border-neutral-300 font-serif transition-all duration-300 ${
+                          <div className={`bg-white shadow-xl p-6 md:p-8 mx-auto text-black border border-neutral-300 font-serif transition-all duration-300 overflow-auto ${
                             orientation === 'portrait'
-                              ? 'w-full max-w-[650px] min-h-[850px]'
-                              : 'w-[950px] min-h-[670px] max-w-none'
+                              ? 'w-full max-w-[650px] aspect-[210/297] min-h-[850px]'
+                              : 'w-full max-w-[950px] aspect-[297/210] min-h-[500px] md:min-h-[650px]'
                           }`}>
                             {/* Print Header */}
                             <div className="border-b-2 border-black pb-4 mb-6">
@@ -856,6 +867,319 @@ export default function App() {
                         )}
                       </div>
                     </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Guida Operativa / Manuale Utente Modal */}
+          <AnimatePresence>
+            {isHelpOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-editorial-text/40 backdrop-blur-sm">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ type: "spring", damping: 25, stiffness: 250 }}
+                  className="bg-white text-black border border-neutral-300 w-full max-w-[900px] h-[90vh] flex flex-col shadow-2xl overflow-hidden font-sans"
+                >
+                  {/* Modal Header */}
+                  <div className="p-6 border-b border-neutral-200 flex items-center justify-between bg-neutral-50 shrink-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-10 bg-editorial-text text-editorial-bg flex items-center justify-center shadow-md skew-y-1">
+                        <span className="font-serif font-black text-lg">?</span>
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold uppercase tracking-widest font-serif leading-none mb-1">Guida Operativa Biblioteca</h2>
+                        <p className="text-[10px] text-neutral-500 uppercase tracking-wider font-bold">Istruzioni & Procedure d'Uso per l'Operatore</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsHelpOpen(false)}
+                      className="p-2 border border-neutral-200 rounded-sm hover:bg-neutral-100 transition-colors"
+                      title="Chiudi"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* Modal Content - Side Tabs on md+, single-page with sections if needed */}
+                  <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+                    {/* Left Sidebar Menu */}
+                    <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-neutral-200 bg-neutral-50/50 p-4 overflow-y-auto shrink-0 flex md:flex-col gap-1 md:gap-0">
+                      <div className="hidden md:block text-[10px] uppercase tracking-widest font-black text-neutral-400 px-3 py-2">Sezioni Guida</div>
+                      <div className="flex md:flex-col flex-wrap md:flex-nowrap gap-1 w-full">
+                        {[
+                          { id: "intro", label: "1. Introduzione & Accesso" },
+                          { id: "gestione", label: "2. Gestione Volumi" },
+                          { id: "ricerca", label: "3. Ricerca & Filtri" },
+                          { id: "bulk", label: "4. Modifiche Massive" },
+                          { id: "import", label: "5. Import di Massa" },
+                          { id: "stampa", label: "6. Esportazione & Stampa" },
+                          { id: "faq", label: "7. FAQ & Guida Rapida" }
+                        ].map(section => (
+                          <button
+                            key={section.id}
+                            onClick={() => setActiveHelpSection(section.id)}
+                            className={`text-left px-3 py-2 text-[11px] md:text-xs font-bold font-sans uppercase tracking-wider transition-colors rounded-sm flex items-center w-full min-w-[120px] md:min-w-0 ${
+                              activeHelpSection === section.id
+                                ? "bg-editorial-text text-white"
+                                : "text-neutral-700 hover:bg-neutral-150"
+                            }`}
+                          >
+                            {section.label}
+                          </button>
+                        ))}
+                      </div>
+                      
+                      <div className="hidden md:block mt-auto pt-6 border-t border-neutral-200 text-center px-2">
+                        <div className="text-[9px] font-mono text-neutral-500 uppercase tracking-widest">
+                          Biblioteca di Casa v2.4
+                        </div>
+                        <div className="text-[8px] text-neutral-400 mt-1">
+                          Pronto all'uso • Layout Responsivo
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Content Area */}
+                    <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-neutral-50/10">
+                      {activeHelpSection === "intro" && (
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-serif italic font-bold border-b border-neutral-150 pb-2 text-editorial-text">1. Introduzione & Modalità di Accesso</h3>
+                          <p className="text-sm text-neutral-600 leading-relaxed font-sans">
+                            L'applicazione è progettata per la catalogazione ed archiviazione digitale di biblioteche private o associative. Supporta una doppia modalità operativa in base alla configurazione dell'ambiente:
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 font-sans">
+                            <div className="p-4 bg-white border border-neutral-200 rounded-sm shadow-sm">
+                              <h4 className="text-xs font-black uppercase tracking-widest text-neutral-800 mb-1.5">💾 Modalità Locale (Offline)</h4>
+                              <p className="text-xs text-neutral-600 leading-relaxed">
+                                Se il modulo Cloud non è configurato o l'operatore sceglie l'accesso locale, tutti i dati vengono memorizzati nel browser corrente tramite <span className="font-semibold underline">localStorage</span>. Questa modalità è ideale per consultazioni rapide e non necessita d'internet, ma i dati non sono sincronizzati con gli altri membri.
+                              </p>
+                            </div>
+                            <div className="p-4 bg-editorial-text/5 border border-editorial-text/15 rounded-sm shadow-sm">
+                              <h4 className="text-xs font-black uppercase tracking-widest text-neutral-800 mb-1.5">☁️ Modalità Cloud (Supabase)</h4>
+                              <p className="text-xs text-neutral-600 leading-relaxed text-neutral-700">
+                                Consente la sincronizzazione integrata e persistente dei dati su server protetti. Richiede un account abilitato (email e password). I dati inseriti sono immediatamente visibili e modificabili su qualsiasi altro dispositivo connesso.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="mt-4 p-3 bg-neutral-100 border-l-4 border-neutral-800 text-xs italic text-neutral-600 font-sans">
+                            <strong>Note di Sicurezza:</strong> Gli utenti non esplicitamente autorizzati rimangono sospesi o visualizzano "Accesso Negato" fino all'approvazione delle credenziali.
+                          </div>
+                        </div>
+                      )}
+
+                      {activeHelpSection === "gestione" && (
+                        <div className="space-y-4 font-sans">
+                          <h3 className="text-lg font-serif italic font-bold border-b border-neutral-150 pb-2 text-editorial-text">2. Gestione dei singoli Volumi</h3>
+                          <p className="text-sm text-neutral-600 leading-relaxed">
+                            L'operatore può registrare in maniera minuziosa ogni singolo volume inserendo metadati strutturati, suddivisi in tre aree logiche principali:
+                          </p>
+                          <div className="space-y-3 mt-4 text-xs">
+                            <div className="border-l-2 border-neutral-300 pl-3">
+                              <strong className="text-neutral-800 uppercase tracking-wide text-[10px] block mb-1">1. Dati Anagrafici & Identificazione:</strong>
+                              <ul className="list-disc list-inside text-neutral-600 space-y-1">
+                                <li><strong>Codice (ISBN/Interno):</strong> Codice a barre o contrassegno univoco della biblioteca.</li>
+                                <li><strong>Titolo & Autore:</strong> I dettagli cardine del volume (l'autore viene autocompletato durante la digitazione).</li>
+                                <li><strong>Editore, Collana & Anno:</strong> Informazioni utili per tracciare la specifica edizione cartacea.</li>
+                              </ul>
+                            </div>
+                            <div className="border-l-2 border-neutral-300 pl-3">
+                              <strong className="text-neutral-800 uppercase tracking-wide text-[10px] block mb-1">2. Collocazione & Specifiche:</strong>
+                              <ul className="list-disc list-inside text-neutral-600 space-y-1">
+                                <li><strong>Collocazione / Scaffale:</strong> Posizione fisica esatta in casa o nell'archivio (es: <em>Scaffale A-3, Salone</em>).</li>
+                                <li><strong>Nazione, Pagine e Formato:</strong> Altri metadati descrittivi del libro.</li>
+                                <li><strong>Tipolgie Speciali:</strong> Flag per identificare se si tratta di un <em>Romanzo</em> o di un'opera strutturata in <em>Lingua Originale</em> (con annesso Traduttore).</li>
+                              </ul>
+                            </div>
+                            <div className="border-l-2 border-neutral-300 pl-3">
+                              <strong className="text-neutral-800 uppercase tracking-wide text-[10px] block mb-1">3. Stato di Possesso & Prestito:</strong>
+                              <ul className="list-disc list-inside text-neutral-600 space-y-1">
+                                <li><strong>Di Proprietà:</strong> Indica se il libro appartiene stabilmente all'archivio, specificando l'anno d'acquisto/entrata e chi ne è il proprietario legittimo.</li>
+                                <li><strong>In Prestito:</strong> Permette di contrassegnare il libro come temporaneamente assegnato a terzi, annotandone la data e il destinatario.</li>
+                              </ul>
+                            </div>
+                            <div className="border-l-2 border-neutral-300 pl-3">
+                              <strong className="text-neutral-800 uppercase tracking-wide text-[10px] block mb-1">4. Racconti Contenuti (Antologie):</strong>
+                              <ul className="list-disc list-inside text-neutral-600 space-y-1">
+                                <li><strong>Indice delle Opere:</strong> Per le raccolte, antologie o volumi collettanei, puoi registrare singolarmente i testi ospitati indicandone Autore e Titolo.</li>
+                                <li><strong>Inserimento Allineato e Copia:</strong> I campi di testo per l'inserimento sono allineati con l'Autore a sinistra e il Titolo a destra, includendo una funzione rapida per copiare l'autore del libro corrente.</li>
+                                <li><strong>Badge nel Catalogo:</strong> I libri contenenti racconti mostreranno un badge indicatore direttamente sulle loro tessere nella galleria principale.</li>
+                              </ul>
+                            </div>
+                          </div>
+                          <div className="p-3 bg-red-50 text-red-955 border border-red-150 text-xs font-semibold rounded-sm mt-4">
+                            ⚠️ Per eliminare un libro, si deve accedere alla scheda di modifica del volume cliccandoci sopra, scorrere fino in fondo e fare clic sul tasto rosso "Elimina permanente".
+                          </div>
+                        </div>
+                      )}
+
+                      {activeHelpSection === "ricerca" && (
+                        <div className="space-y-4 font-sans">
+                          <h3 className="text-lg font-serif italic font-bold border-b border-neutral-150 pb-2 text-editorial-text">3. Filtri Avanzati & Ricerca Dinamica</h3>
+                          <p className="text-sm text-neutral-600 leading-relaxed">
+                            Il motore di ricerca integrato esegue scansioni in tempo reale ed è potenziato da filtri predittivi che facilitano la navigazione in cataloghi composti da centinaia o migliaia di volumi.
+                          </p>
+                          <div className="space-y-3 text-xs mt-3">
+                            <div className="bg-white p-3 border border-neutral-200 shadow-sm rounded-sm">
+                              <h4 className="font-bold text-neutral-800 uppercase text-[10px] tracking-wider mb-1">🔍 Barra di Ricerca Libera:</h4>
+                              <p className="text-neutral-600 leading-relaxed">
+                                Posizionata al centro del menu superiore, analizza simultaneamente il <strong>Titolo</strong>, l'<strong>Autore</strong> e il <strong>Codice</strong> del libro per fornire risultati immediati mentre digiti.
+                              </p>
+                            </div>
+                            <div className="bg-white p-3 border border-neutral-200 shadow-sm rounded-sm">
+                              <h4 className="font-bold text-neutral-800 uppercase text-[10px] tracking-wider mb-1">🎯 Filtri a Tendina e Autocompletamento:</h4>
+                              <p className="text-neutral-600 leading-relaxed">
+                                Nel menu a comparsa sinistro, puoi impostare combinazioni di 6 filtri (<strong>Autore, Genere, Editore, Collana, Collocazione Scaffale, Nazione</strong>).
+                              </p>
+                              <p className="text-neutral-600 mt-1.5 font-medium text-emerald-800">
+                                💡 Suggerimento Predittivo: Inizia a digitare le prime lettere del valore cercato (es. digita "cina"): apparirà un elenco a discesa automatico attinto dai valori realmente già presenti in archivio, consentendo l'auto-selezione ed impedendo refusi.
+                              </p>
+                            </div>
+                            <div className="bg-white p-3 border border-neutral-200 shadow-sm rounded-sm">
+                              <h4 className="font-bold text-neutral-800 uppercase text-[10px] tracking-wider mb-1">🧹 Reimpostazione Rapida:</h4>
+                              <p className="text-neutral-600 leading-relaxed">
+                                Un bottone rosso "Svuota filtri" permette di resettare istantaneamente tutte le preferenze di filtraggio ripristinando la visualizzazione completa dell'inventario.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeHelpSection === "bulk" && (
+                        <div className="space-y-4 font-sans">
+                          <h3 className="text-lg font-serif italic font-bold border-b border-neutral-150 pb-2 text-editorial-text">4. Modifiche Massive (Bulk Update)</h3>
+                          <p className="text-sm text-neutral-600 leading-relaxed">
+                            Quando è necessario riordinare o riorganizzare la biblioteca, modificare un volume alla volta può richiedere molto tempo. Per questo è presente la funzionalità di <strong>Modifica di Massa (Bulk Update)</strong>:
+                          </p>
+                          <div className="p-4 bg-white border border-neutral-200 shadow-sm text-xs space-y-2 rounded-sm">
+                            <h4 className="font-bold uppercase tracking-wider text-neutral-800 text-[10px]">🛠️ Procedura Operativa:</h4>
+                            <ol className="list-decimal list-inside space-y-1.5 text-neutral-600 leading-relaxed">
+                              <li>Utilizza i filtri della colonna di sinistra o la barra di ricerca per visualizzare <strong>solo il sottoinsieme di libri</strong> che intendi colpire (es: filtra per "Scaffale: Scaffale A-1").</li>
+                              <li>Fai clic sul tasto <span className="font-black">"Modifica di massa"</span> in fondo al pannello sinistro.</li>
+                              <li>L'applicativo rileverà automaticamente il numero esatto di libri presenti in quella specifica selezione.</li>
+                              <li>Scegli la proprietà da sovrascrivere tra: <em>Scaffale/Collocazione, Genere, Editore, Autore, Nazione, Proprietà o Stato del Prestito</em>.</li>
+                              <li>Inserisci il nuovo valore e clicca su <strong>"Aggiorna Volumi Selezionati"</strong> per applicare la modifica all'intero blocco all'istante.</li>
+                            </ol>
+                          </div>
+                          <div className="p-3 bg-amber-50 border border-amber-200 text-xs italic text-amber-950 rounded-sm">
+                            ⚠️ <strong>Attenzione:</strong> Le modifiche massive sovrascrivono i campi in modo definitivo per tutti i record corrispondenti. Si consiglia di effettuare una verifica visiva sull'anteprima dei risultati prima di procedere con l'aggiornamento.
+                          </div>
+                        </div>
+                      )}
+
+                      {activeHelpSection === "import" && (
+                        <div className="space-y-4 font-sans">
+                          <h3 className="text-lg font-serif italic font-bold border-b border-neutral-150 pb-2 text-editorial-text">5. Importazione di Massa</h3>
+                          <p className="text-sm text-neutral-600 leading-relaxed">
+                            Se si possiede già un archivio digitale registrato in precedenza, l'operatore può importarlo istantaneamente tramite il tasto <strong>"Importa"</strong> situato nel menu laterale.
+                          </p>
+                          <div className="bg-white p-4 border border-neutral-200 shadow-sm text-xs space-y-3 rounded-sm leading-relaxed">
+                            <h4 className="font-bold uppercase tracking-wider text-neutral-800 text-[10px]">📂 Formati di file supportati:</h4>
+                            <ul className="list-disc list-inside space-y-1.5 text-neutral-600">
+                              <li><strong>File Excel (.xlsx):</strong> Ideale per tabelle o registri pre-esistenti.</li>
+                              <li><strong>File JSON (.json):</strong> Ideale per backup strutturati.</li>
+                            </ul>
+                            <h4 className="font-bold uppercase tracking-wider text-neutral-800 text-[10px] pt-1">🤝 Mappatura Intelligente delle Colonne:</h4>
+                            <p className="text-neutral-600">
+                              Il motore di importazione accoppia automaticamente le colonne con nomi similari (in italiano o inglese, minuscoli/maiuscoli):
+                            </p>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 font-mono text-[10.5px] bg-neutral-50 p-3 border border-neutral-150">
+                              <div>• titolo / title</div>
+                              <div>• autore / author</div>
+                              <div>• editore / publisher</div>
+                              <div>• codice / isbn</div>
+                              <div>• genere / genre</div>
+                              <div>• scaffale / shelf</div>
+                              <div>• collana / series</div>
+                              <div>• anno / year</div>
+                              <div>• nazione / country</div>
+                            </div>
+                            <p className="text-neutral-600 mt-2">
+                              Una volta caricato il file, il sistema mostrerà una griglia di anteprima dei record catturati. Cliccando su <strong>"Salva nel Database"</strong>, l'inventario verrà arricchito in tempo reale.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeHelpSection === "stampa" && (
+                        <div className="space-y-4 font-sans">
+                          <h3 className="text-lg font-serif italic font-bold border-b border-neutral-150 pb-2 text-editorial-text">6. Esportazione & Stampa Registro</h3>
+                          <p className="text-sm text-neutral-600 leading-relaxed bg-neutral-50 p-3 border-l-4 border-editorial-text italic text-neutral-700">
+                            "Inviare in stampa l'elenco dei libri filtrato con la possibilità di scegliere l'orientamento, visualizzandone l'anticipazione estetica."
+                          </p>
+                          <p className="text-sm text-neutral-600 leading-relaxed">
+                            Il pannello di stampa si attiva con l'icona della stampante nel menu superiore e permette di predisporre fogli A4 da inviare in stampa fisica:
+                          </p>
+                          <div className="space-y-3 text-xs">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="p-3 bg-white border border-neutral-200 shadow-sm rounded-sm">
+                                <span className="font-bold block text-neutral-800 uppercase tracking-wider text-[10px] mb-1">📐 Orientamento Foglio</span>
+                                <p className="text-neutral-600 leading-relaxed">
+                                  Scegli tra <strong>Verticale (Portrait)</strong> e <strong>Orizzontale (Landscape)</strong>. L'anticipazione estetica a schermo regola immediatamente larghezze e altezze simulando la proporzione della pagina cartacea.
+                                </p>
+                              </div>
+                              <div className="p-3 bg-white border border-neutral-200 shadow-sm rounded-sm">
+                                <span className="font-bold block text-neutral-800 uppercase tracking-wider text-[10px] mb-1">🗂️ Selezione Colonne</span>
+                                <p className="text-neutral-600 leading-relaxed">
+                                  Spunta o togli la selezione alle proprietà dei libri. Una tabella più pulita eviterà che le righe si sovrappongano o fuoriescano dai margini fisici nel documento finale stampato.
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <div className="p-3 bg-white border border-neutral-200 shadow-sm rounded-sm space-y-1.5">
+                              <span className="font-bold block text-neutral-800 uppercase tracking-wider text-[10px]">📊 Informazioni di Testata Inserite in Stampa</span>
+                              <p className="text-neutral-600">
+                                Il registro include elementi ufficiali fondamentali per la tracciabilità:
+                              </p>
+                              <ul className="list-disc list-inside text-neutral-600 space-y-1 ml-1">
+                                <li>La <strong>Data e ora esatte</strong> di creazione del documento.</li>
+                                <li>L'elenco esplicito dei <strong>Filtri e Ricerche attivi</strong> (es: "Scaffale: Scaffale B"), permettendo di sapere con esattezza cosa è rappresentato nel foglio.</li>
+                                <li>Il <strong>Conteggio esatto dei volumi estratti</strong>.</li>
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeHelpSection === "faq" && (
+                        <div className="space-y-4 font-sans">
+                          <h3 className="text-lg font-serif italic font-bold border-b border-neutral-150 pb-2 text-editorial-text">7. FAQ & Guida Rapida</h3>
+                          <div className="space-y-3.5 text-xs">
+                            <div className="bg-white p-3.5 border border-neutral-200 shadow-sm rounded-sm">
+                              <p className="font-black text-neutral-900 mb-1">Q: Perché visualizzo l'avviso "Cloud Non Configurato"?</p>
+                              <p className="text-neutral-600 leading-relaxed">
+                                Indica che i dati rimarranno memorizzati esclusivamente in questo specifico browser. È possibile inserire migliaia di libri senza alcun intralcio, ma per centralizzarli in rete occorre abilitare la chiave Supabase.
+                              </p>
+                            </div>
+                            <div className="bg-white p-3.5 border border-neutral-200 shadow-sm rounded-sm">
+                              <p className="font-black text-neutral-900 mb-1">Q: Come funziona lo sblocco dei suggerimenti durante il filtro?</p>
+                              <p className="text-neutral-600 leading-relaxed">
+                                I menu a discesa degli autocompletamenti della colonna sinistra appaiono non appena l'operatore digita <strong>almeno 3 caratteri</strong> nel rispettivo campo. Ciò evita query pesanti ed accelera l'esecuzione dell'applicativo.
+                              </p>
+                            </div>
+                            <div className="bg-white p-3.5 border border-neutral-200 shadow-sm rounded-sm">
+                              <p className="font-black text-neutral-900 mb-1">Q: Che cos'è la "Tipologia: Romanzo" o "In Lingua Originale"?</p>
+                              <p className="text-neutral-600 leading-relaxed">
+                                Contrassegni che permettono di classificare opere narrative o opere letterarie in lingua estera, dando la possibilità di annotare in automatico anche il <em>Traduttore</em> e il <em>Titolo Originale</em>.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="p-4 border-t border-neutral-200 bg-neutral-50 flex justify-end shrink-0">
+                    <button
+                      onClick={() => setIsHelpOpen(false)}
+                      className="px-6 py-2.5 bg-editorial-text text-editorial-bg font-sans text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all rounded-sm active:scale-95 shadow-sm"
+                    >
+                      Chiudi Guida
+                    </button>
                   </div>
                 </motion.div>
               </div>

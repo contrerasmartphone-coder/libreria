@@ -1,3 +1,9 @@
+export interface Racconto {
+  id: string;
+  titolo: string;
+  autore: string;
+}
+
 export interface Book {
   id?: string;
   codice: string;
@@ -27,4 +33,5 @@ export interface Book {
   ownerId: string;
   createdAt: any;
   updatedAt: any;
+  racconti?: Racconto[];
 }

@@ -38,6 +38,11 @@ export default function BookCard({ book, onEdit, onDelete, viewMode }: BookCardP
               {book.inPrestito ? "In Prestito" : "Disponibile"}
             </span>
             <span className="text-[11px] md:text-[10px] font-sans opacity-70 italic font-bold">{book.scaffale ? `Scaffale ${book.scaffale}` : "Archivio"}</span>
+            {book.racconti && book.racconti.length > 0 && (
+              <span className="text-[11px] md:text-[10px] font-sans text-editorial-text font-black px-2.5 py-0.5 uppercase tracking-wider bg-editorial-text/5 rounded-xs select-none">
+                📚 {book.racconti.length} racconti
+              </span>
+            )}
             
 
           </div>
@@ -82,6 +87,12 @@ export default function BookCard({ book, onEdit, onDelete, viewMode }: BookCardP
         <p className="text-sm md:text-base italic font-black mb-3 md:mb-4 text-editorial-text break-words">{book.autore || "Autore Ignoto"}</p>
         
         <div className="flex flex-col gap-2 md:gap-3 border-t border-editorial-text/10 pt-3 md:pt-4 mt-auto">
+          {book.racconti && book.racconti.length > 0 && (
+            <div className="text-left font-sans text-[10px] uppercase font-black tracking-widest text-[#5C5A55] bg-black/5 px-2.5 py-1.5 rounded-xs flex items-center justify-between select-none">
+              <span>Racconti contenuti:</span>
+              <span className="font-mono text-xs">{book.racconti.length}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className={cn(
               "text-[10px] md:text-xs font-sans font-black uppercase tracking-wider px-2 md:px-3 py-1 md:py-1 rounded-sm",

@@ -20,6 +20,13 @@ const saveLocalData = <T>(key: string, data: T[]) => {
   localStorage.setItem(key, JSON.stringify(data));
 };
 
+const escapePostgrestValue = (val: string): string => {
+  // PostgREST requires values in .or() containing special characters to be enclosed in double quotes
+  // We escape backslashes first, then internal double quotes
+  const escaped = val.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${escaped}"`;
+};
+
 export const libraryService = {
   isCloudEnabled,
   cloudProvider: 'supabase',
@@ -67,6 +74,23 @@ export const libraryService = {
       }
     });
 
+    if (book.racconti !== undefined) {
+      dbRow.racconti = book.racconti;
+      
+      // Fallback: se la colonna racconta non esiste, prepariamo il commento con i racconti serializzati
+      let commentContent = book.commento || "";
+      // Rimuoviamo eventuali racconti precedentemente storicizzati in commento per evitare duplicazioni
+      if (commentContent.includes('[__racconti__]:')) {
+        commentContent = commentContent.split('[__racconti__]:')[0].trim();
+      }
+      
+      if (book.racconti.length > 0) {
+        dbRow.commento = `${commentContent}\n\n[__racconti__]:${JSON.stringify(book.racconti)}`.trim();
+      } else {
+        dbRow.commento = commentContent === "" ? null : commentContent;
+      }
+    }
+
     // Campi metadata fissi
     if (book.ownerId !== undefined) dbRow.owner_id = book.ownerId;
     if (book.createdAt !== undefined) dbRow.created_at = book.createdAt === "" ? null : book.createdAt;
@@ -76,8 +100,41 @@ export const libraryService = {
   },
 
   mapDbToBook(row: any): Book {
+    let raccontiParsed: any[] = [];
+    let cleanCommento = row.commento || "";
+
+    // Estraiamo prima da row.commento se presente la marcatura fallback
+    if (cleanCommento && cleanCommento.includes('[__racconti__]:')) {
+      const parts = cleanCommento.split('[__racconti__]:');
+      cleanCommento = parts[0].trim();
+      try {
+        const jsonStr = parts.slice(1).join('[__racconti__]:');
+        raccontiParsed = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("Errore parsing racconti da commento fallback:", e);
+      }
+    }
+
+    // Se esiste la colonna row.racconti, diamole la precedenza se popolata
+    if (row.racconti) {
+      if (typeof row.racconti === 'string') {
+        try {
+          const parsed = JSON.parse(row.racconti);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            raccontiParsed = parsed;
+          }
+        } catch (e) {
+          // Mantieni quello di commento
+        }
+      } else if (Array.isArray(row.racconti) && row.racconti.length > 0) {
+        raccontiParsed = row.racconti;
+      }
+    }
+
     return {
       ...row,
+      commento: cleanCommento,
+      racconti: raccontiParsed,
       id: row.codice, // We use codice as the frontend ID
       ownerId: row.owner_id,
       createdAt: row.created_at,
@@ -120,10 +177,24 @@ export const libraryService = {
 
       console.log("Tentativo di inserimento libro:", insertData);
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('books')
         .insert([insertData])
         .select();
+
+      if (error && (error.code === '42703' || error.message?.includes('racconti'))) {
+        console.warn("La colonna 'racconti' non esiste nel database. Provo il salvataggio alternativo in 'commento'.");
+        const fallbackInsertData = { ...insertData };
+        delete fallbackInsertData.racconti;
+
+        const retryResult = await supabase
+          .from('books')
+          .insert([fallbackInsertData])
+          .select();
+
+        data = retryResult.data;
+        error = retryResult.error;
+      }
       
       if (error) {
         console.error("Errore critico salvataggio libro Supabase:", error);
@@ -179,11 +250,24 @@ export const libraryService = {
       });
       
       // Match by codice exclusively
-      const { error: updateError } = await supabase
+      let { error: updateError } = await supabase
         .from('books')
         .update(dbUpdates)
         .eq('codice', id); 
       
+      if (updateError && (updateError.code === '42703' || updateError.message?.includes('racconti'))) {
+        console.warn("La colonna 'racconti' non esiste nel database per l'aggiornamento. Provo il salvataggio alternativo.");
+        const fallbackUpdates = { ...dbUpdates };
+        delete fallbackUpdates.racconti;
+
+        const retryResult = await supabase
+          .from('books')
+          .update(fallbackUpdates)
+          .eq('codice', id);
+
+        updateError = retryResult.error;
+      }
+
       if (updateError) {
         console.error("Errore aggiornamento libro Cloud:", updateError);
         throw updateError;
@@ -267,11 +351,17 @@ export const libraryService = {
       
       if (searchTerm && searchTerm.trim() !== "") {
         const term = `%${searchTerm.trim()}%`;
-        query = query.or(`titolo.ilike.${term},autore.ilike.${term},codice.ilike.${term}`);
+        const escTerm = escapePostgrestValue(term);
+        // Cerca per titolo, autore, codice volume, e anche nel commento/racconti fallback
+        query = query.or(`titolo.ilike.${escTerm},autore.ilike.${escTerm},codice.ilike.${escTerm},commento.ilike.${escTerm}`);
       }
 
       // Add specific filters
-      if (filters.autore) query = query.ilike('autore', `%${filters.autore}%`);
+      if (filters.autore) {
+        const authTerm = `%${filters.autore}%`;
+        const escAuth = escapePostgrestValue(authTerm);
+        query = query.or(`autore.ilike.${escAuth},commento.ilike.${escAuth}`);
+      }
       if (filters.genere) query = query.ilike('genere', `%${filters.genere}%`);
       if (filters.editore) query = query.ilike('editore', `%${filters.editore}%`);
       if (filters.collana) query = query.ilike('collana', `%${filters.collana}%`);
@@ -304,12 +394,19 @@ export const libraryService = {
       books = books.filter(b => 
         b.titolo?.toLowerCase().includes(term) || 
         b.autore?.toLowerCase().includes(term) || 
-        b.codice?.toLowerCase().includes(term)
+        b.codice?.toLowerCase().includes(term) ||
+        (b.racconti && b.racconti.some(r => r.autore?.toLowerCase().includes(term)))
       );
     }
 
     // Specific filters
-    if (filters.autore) books = books.filter(b => b.autore?.toLowerCase().includes(filters.autore!.toLowerCase()));
+    if (filters.autore) {
+      const authTerm = filters.autore.toLowerCase();
+      books = books.filter(b => 
+        b.autore?.toLowerCase().includes(authTerm) ||
+        (b.racconti && b.racconti.some(r => r.autore?.toLowerCase().includes(authTerm)))
+      );
+    }
     if (filters.genere) books = books.filter(b => b.genere?.toLowerCase().includes(filters.genere!.toLowerCase()));
     if (filters.editore) books = books.filter(b => b.editore?.toLowerCase().includes(filters.editore!.toLowerCase()));
     if (filters.collana) books = books.filter(b => b.collana?.toLowerCase().includes(filters.collana!.toLowerCase()));
@@ -344,11 +441,17 @@ export const libraryService = {
       
       if (searchTerm && searchTerm.trim() !== "") {
         const term = `%${searchTerm.trim()}%`;
-        query = query.or(`titolo.ilike.${term},autore.ilike.${term},codice.ilike.${term}`);
+        const escTerm = escapePostgrestValue(term);
+        // Cerca per titolo, autore, codice volume, e anche nel commento/racconti fallback
+        query = query.or(`titolo.ilike.${escTerm},autore.ilike.${escTerm},codice.ilike.${escTerm},commento.ilike.${escTerm}`);
       }
 
       // Add specific filters
-      if (filters.autore) query = query.ilike('autore', `%${filters.autore}%`);
+      if (filters.autore) {
+        const authTerm = `%${filters.autore}%`;
+        const escAuth = escapePostgrestValue(authTerm);
+        query = query.or(`autore.ilike.${escAuth},commento.ilike.${escAuth}`);
+      }
       if (filters.genere) query = query.ilike('genere', `%${filters.genere}%`);
       if (filters.editore) query = query.ilike('editore', `%${filters.editore}%`);
       if (filters.collana) query = query.ilike('collana', `%${filters.collana}%`);
@@ -375,12 +478,19 @@ export const libraryService = {
       books = books.filter(b => 
         b.titolo?.toLowerCase().includes(term) || 
         b.autore?.toLowerCase().includes(term) || 
-        b.codice?.toLowerCase().includes(term)
+        b.codice?.toLowerCase().includes(term) ||
+        (b.racconti && b.racconti.some(r => r.autore?.toLowerCase().includes(term)))
       );
     }
 
     // Specific filters
-    if (filters.autore) books = books.filter(b => b.autore?.toLowerCase().includes(filters.autore!.toLowerCase()));
+    if (filters.autore) {
+      const authTerm = filters.autore.toLowerCase();
+      books = books.filter(b => 
+        b.autore?.toLowerCase().includes(authTerm) ||
+        (b.racconti && b.racconti.some(r => r.autore?.toLowerCase().includes(authTerm)))
+      );
+    }
     if (filters.genere) books = books.filter(b => b.genere?.toLowerCase().includes(filters.genere!.toLowerCase()));
     if (filters.editore) books = books.filter(b => b.editore?.toLowerCase().includes(filters.editore!.toLowerCase()));
     if (filters.collana) books = books.filter(b => b.collana?.toLowerCase().includes(filters.collana!.toLowerCase()));
@@ -491,10 +601,23 @@ export const libraryService = {
       const chunkSize = 50;
       for (let i = 0; i < sanitized.length; i += chunkSize) {
         const chunk = sanitized.slice(i, i + chunkSize);
-        const { error } = await supabase
+        let { error } = await supabase
           .from('books')
           .insert(chunk);
         
+        if (error && (error.code === '42703' || error.message?.includes('racconti'))) {
+          console.warn("La colonna 'racconti' non esiste nel database durante l'importazione. Riprovo senza la colonna.");
+          const fallbackChunk = chunk.map(item => {
+            const fallbackItem = { ...item };
+            delete fallbackItem.racconti;
+            return fallbackItem;
+          });
+          const retryResult = await supabase
+            .from('books')
+            .insert(fallbackChunk);
+          error = retryResult.error;
+        }
+
         if (error) {
           console.error("Batch insert error at chunk", i, error);
           throw error;
@@ -574,9 +697,14 @@ export const libraryService = {
       // Apply filters
       if (searchTerm && searchTerm.trim() !== "") {
         const term = `%${searchTerm.trim()}%`;
-        query = query.or(`titolo.ilike.${term},autore.ilike.${term},codice.ilike.${term}`);
+        const escTerm = escapePostgrestValue(term);
+        query = query.or(`titolo.ilike.${escTerm},autore.ilike.${escTerm},codice.ilike.${escTerm}`);
       }
-      if (filters.autore) query = query.ilike('autore', `%${filters.autore}%`);
+      if (filters.autore) {
+        const authTerm = `%${filters.autore}%`;
+        const escAuth = escapePostgrestValue(authTerm);
+        query = query.or(`autore.ilike.${escAuth},commento.ilike.${escAuth}`);
+      }
       if (filters.genere) query = query.ilike('genere', `%${filters.genere}%`);
       if (filters.editore) query = query.ilike('editore', `%${filters.editore}%`);
       if (filters.collana) query = query.ilike('collana', `%${filters.collana}%`);
@@ -602,7 +730,13 @@ export const libraryService = {
     }
 
     // Apply specific filters
-    if (filters.autore) books = books.filter(b => b.autore?.toLowerCase().includes(filters.autore!.toLowerCase()));
+    if (filters.autore) {
+      const authTerm = filters.autore.toLowerCase();
+      books = books.filter(b => 
+        b.autore?.toLowerCase().includes(authTerm) ||
+        (b.racconti && b.racconti.some(r => r.autore?.toLowerCase().includes(authTerm)))
+      );
+    }
     if (filters.genere) books = books.filter(b => b.genere?.toLowerCase().includes(filters.genere!.toLowerCase()));
     if (filters.editore) books = books.filter(b => b.editore?.toLowerCase().includes(filters.editore!.toLowerCase()));
     if (filters.collana) books = books.filter(b => b.collana?.toLowerCase().includes(filters.collana!.toLowerCase()));
