@@ -341,8 +341,10 @@ export default function Dashboard({
                   >
                     <option value="created_at">Data Inserimento</option>
                     <option value="titolo">Titolo</option>
+                    <option value="autore">Autore</option>
                     <option value="codice">Codice</option>
                     <option value="anno">Anno</option>
+                    <option value="scaffale">Scaffale</option>
                   </select>
                   <button 
                     onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
