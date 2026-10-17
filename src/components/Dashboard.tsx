@@ -24,6 +24,7 @@ interface DashboardProps {
   onLogout: () => void;
   onCountsChange: (total: number, filtered: number) => void;
   onFiltersApplied?: (filters: any, sortBy: string, sortOrder: "asc" | "desc") => void;
+  resetFiltersSignal?: number;
 }
 
 export default function Dashboard({ 
@@ -38,7 +39,8 @@ export default function Dashboard({
   useLocalMode,
   onLogout,
   onCountsChange,
-  onFiltersApplied
+  onFiltersApplied,
+  resetFiltersSignal
 }: DashboardProps) {
   const [books, setBooks] = useState<Book[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
@@ -52,13 +54,106 @@ export default function Dashboard({
   const [editingBook, setEditingBook] = useState<Book | undefined>(undefined);
   const [loading, setLoading] = useState(true);
 
-  // Sorting and Filtering states
-  const [sortBy, setSortBy] = useState<string>('created_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [filters, setFilters] = useState<{ autore?: string; genere?: string; editore?: string; collana?: string; scaffale?: string; nazione?: string }>({});
-  const [filterInputs, setFilterInputs] = useState<{ autore: string; genere: string; editore: string; collana: string; scaffale: string; nazione: string }>({
-    autore: "", genere: "", editore: "", collana: "", scaffale: "", nazione: ""
+  // Sorting and Filtering states (persisted across page reloads)
+  const [sortBy, setSortBy] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("library_sort_by");
+      if (saved && ["created_at", "titolo", "autore", "codice", "anno", "scaffale"].includes(saved)) {
+        return saved;
+      }
+    } catch (e) {
+      console.error("Errore lettura ordinamento da localStorage:", e);
+    }
+    return 'created_at';
   });
+
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    try {
+      const saved = localStorage.getItem("library_sort_order");
+      if (saved === 'asc' || saved === 'desc') {
+        return saved;
+      }
+    } catch (e) {
+      console.error("Errore lettura direzione ordinamento da localStorage:", e);
+    }
+    return 'desc';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("library_sort_by", sortBy);
+    } catch (e) {
+      console.error("Errore salvataggio ordinamento in localStorage:", e);
+    }
+  }, [sortBy]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("library_sort_order", sortOrder);
+    } catch (e) {
+      console.error("Errore salvataggio direzione ordinamento in localStorage:", e);
+    }
+  }, [sortOrder]);
+  // Advanced filters state persisted across page reloads
+  const [filters, setFilters] = useState<{ autore?: string; genere?: string; editore?: string; collana?: string; scaffale?: string; nazione?: string }>(() => {
+    try {
+      const saved = localStorage.getItem("library_active_filters");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          const valid: Record<string, string> = {};
+          for (const [k, v] of Object.entries(parsed)) {
+            if (typeof v === "string" && v.trim() !== "") {
+              valid[k] = v;
+            }
+          }
+          return valid;
+        }
+      }
+    } catch (e) {
+      console.error("Errore lettura filtri avanzati da localStorage:", e);
+    }
+    return {};
+  });
+
+  const [filterInputs, setFilterInputs] = useState<{ autore: string; genere: string; editore: string; collana: string; scaffale: string; nazione: string }>(() => {
+    try {
+      const saved = localStorage.getItem("library_active_filters");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          return {
+            autore: typeof parsed.autore === "string" ? parsed.autore : "",
+            genere: typeof parsed.genere === "string" ? parsed.genere : "",
+            editore: typeof parsed.editore === "string" ? parsed.editore : "",
+            collana: typeof parsed.collana === "string" ? parsed.collana : "",
+            scaffale: typeof parsed.scaffale === "string" ? parsed.scaffale : "",
+            nazione: typeof parsed.nazione === "string" ? parsed.nazione : ""
+          };
+        }
+      }
+    } catch (e) {
+      console.error("Errore lettura input filtri da localStorage:", e);
+    }
+    return {
+      autore: "", genere: "", editore: "", collana: "", scaffale: "", nazione: ""
+    };
+  });
+
+  const hasActiveFilters = Object.values(filters).some(v => typeof v === "string" && v.trim() !== "");
+
+  useEffect(() => {
+    try {
+      const activeEntries = Object.entries(filters).filter(([_, v]) => typeof v === "string" && v.trim() !== "");
+      if (activeEntries.length > 0) {
+        localStorage.setItem("library_active_filters", JSON.stringify(Object.fromEntries(activeEntries)));
+      } else {
+        localStorage.removeItem("library_active_filters");
+      }
+    } catch (e) {
+      console.error("Errore salvataggio filtri avanzati in localStorage:", e);
+    }
+  }, [filters]);
   
   const [filterOptions, setFilterOptions] = useState<{ 
     autores: string[], 
@@ -165,6 +260,18 @@ export default function Dashboard({
   }, [filters, sortBy, sortOrder, onFiltersApplied]);
 
   useEffect(() => {
+    if (resetFiltersSignal && resetFiltersSignal > 0) {
+      setFilters({});
+      setFilterInputs({ autore: "", genere: "", editore: "", collana: "", scaffale: "", nazione: "" });
+      try {
+        localStorage.removeItem("library_active_filters");
+      } catch (e) {}
+      loadFilterOptions();
+      fetchBooks(true, search);
+    }
+  }, [resetFiltersSignal]);
+
+  useEffect(() => {
     loadFilterOptions();
   }, [absoluteTotalBooks]);
 
@@ -241,12 +348,24 @@ export default function Dashboard({
       setCurrentPage(pageToFetch);
       setTotalFilteredBooks(result.total);
       
-      // Update absolute total if not searching or if it's the initial load
-      if (!currentSearch) {
+      // Update absolute total if not searching and no filters, or notify accurate counts
+      const hasActiveFilters = Object.values(filters).some(v => typeof v === "string" && v.trim() !== "");
+      const isFiltered = Boolean(currentSearch || hasActiveFilters);
+
+      if (!isFiltered) {
         setAbsoluteTotalBooks(result.total);
         onCountsChange(result.total, result.total);
       } else {
-        onCountsChange(absoluteTotalBooks, result.total);
+        let absTotal = absoluteTotalBooks;
+        if (!absTotal) {
+          try {
+            absTotal = await libraryService.getTotalCount();
+            setAbsoluteTotalBooks(absTotal);
+          } catch (e) {
+            absTotal = result.total;
+          }
+        }
+        onCountsChange(absTotal, result.total);
       }
     } catch (error: any) {
       console.error("Errore nel recupero dei libri:", error);
@@ -260,7 +379,8 @@ export default function Dashboard({
     try {
       const total = await libraryService.getTotalCount();
       setAbsoluteTotalBooks(total);
-      onCountsChange(total, totalFilteredBooks || total);
+      const hasActiveFilters = Object.values(filters).some(v => typeof v === "string" && v.trim() !== "");
+      onCountsChange(total, (search || hasActiveFilters) ? (totalFilteredBooks || total) : total);
     } catch (e) {
       console.error("Errore fetchAbsoluteTotal:", e);
     }
@@ -385,6 +505,18 @@ export default function Dashboard({
                       onFocus={() => {
                         if (filterInputs.genere.length >= 3) setOpenFilter('genere');
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = filterInputs.genere.trim();
+                          setFilters(prev => {
+                            const next = { ...prev };
+                            if (val) next.genere = val;
+                            else delete next.genere;
+                            return next;
+                          });
+                          setOpenFilter(null);
+                        }
+                      }}
                       className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
                       autoComplete="off"
                     />
@@ -441,6 +573,18 @@ export default function Dashboard({
                       }}
                       onFocus={() => {
                         if (filterInputs.autore.length >= 3) setOpenFilter('autore');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = filterInputs.autore.trim();
+                          setFilters(prev => {
+                            const next = { ...prev };
+                            if (val) next.autore = val;
+                            else delete next.autore;
+                            return next;
+                          });
+                          setOpenFilter(null);
+                        }
                       }}
                       className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
                       autoComplete="off"
@@ -499,6 +643,18 @@ export default function Dashboard({
                       onFocus={() => {
                         if (filterInputs.editore.length >= 3) setOpenFilter('editore');
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = filterInputs.editore.trim();
+                          setFilters(prev => {
+                            const next = { ...prev };
+                            if (val) next.editore = val;
+                            else delete next.editore;
+                            return next;
+                          });
+                          setOpenFilter(null);
+                        }
+                      }}
                       className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
                       autoComplete="off"
                     />
@@ -555,6 +711,18 @@ export default function Dashboard({
                       }}
                       onFocus={() => {
                         if (filterInputs.collana.length >= 3) setOpenFilter('collana');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = filterInputs.collana.trim();
+                          setFilters(prev => {
+                            const next = { ...prev };
+                            if (val) next.collana = val;
+                            else delete next.collana;
+                            return next;
+                          });
+                          setOpenFilter(null);
+                        }
                       }}
                       className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
                       autoComplete="off"
@@ -613,6 +781,18 @@ export default function Dashboard({
                       onFocus={() => {
                         if (filterInputs.scaffale.length >= 3) setOpenFilter('scaffale');
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = filterInputs.scaffale.trim();
+                          setFilters(prev => {
+                            const next = { ...prev };
+                            if (val) next.scaffale = val;
+                            else delete next.scaffale;
+                            return next;
+                          });
+                          setOpenFilter(null);
+                        }
+                      }}
                       className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
                       autoComplete="off"
                     />
@@ -670,6 +850,18 @@ export default function Dashboard({
                       onFocus={() => {
                         if (filterInputs.nazione.length >= 3) setOpenFilter('nazione');
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = filterInputs.nazione.trim();
+                          setFilters(prev => {
+                            const next = { ...prev };
+                            if (val) next.nazione = val;
+                            else delete next.nazione;
+                            return next;
+                          });
+                          setOpenFilter(null);
+                        }
+                      }}
                       className="w-full text-left bg-transparent border-b border-editorial-text/20 py-2 italic font-bold text-base hover:border-editorial-text transition-colors capitalize focus:outline-none focus:border-editorial-text"
                       autoComplete="off"
                     />
@@ -707,6 +899,9 @@ export default function Dashboard({
                       onClick={() => {
                         setFilters({});
                         setFilterInputs({ autore: "", genere: "", editore: "", collana: "", scaffale: "", nazione: "" });
+                        try {
+                          localStorage.removeItem("library_active_filters");
+                        } catch (e) {}
                         loadFilterOptions();
                       }}
                       className="font-sans text-[11px] font-black uppercase tracking-widest text-red-700 hover:text-red-900 transition-colors flex items-center gap-2"
@@ -774,11 +969,64 @@ export default function Dashboard({
 
       <section className="flex-1 flex flex-col min-w-0 h-full relative">
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-12 scrollbar-hide">
-          <div className="flex justify-between items-center mb-6 lg:mb-8">
-            <h2 className="text-3xl lg:text-5xl italic tracking-tight font-bold">
-              {search ? "Ricerca" : "Catalogo"}
-            </h2>
+          <div className="flex flex-wrap justify-between items-baseline mb-6 lg:mb-8 gap-4">
+            <div className="flex flex-wrap items-baseline gap-3">
+              <h2 className="text-3xl lg:text-5xl italic tracking-tight font-bold">
+                {search ? "Ricerca" : "Catalogo"}
+              </h2>
+              {hasActiveFilters && (
+                <span className="font-sans text-[11px] font-black uppercase tracking-widest text-amber-900 bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 rounded-sm inline-flex items-center gap-1.5 shadow-2xs">
+                  <Filter size={12} className="text-amber-800" />
+                  Elenco Filtrato ({totalFilteredBooks} di {absoluteTotalBooks || totalFilteredBooks})
+                </span>
+              )}
+            </div>
+            
+            {hasActiveFilters && (
+              <button
+                onClick={() => {
+                  setFilters({});
+                  setFilterInputs({ autore: "", genere: "", editore: "", collana: "", scaffale: "", nazione: "" });
+                  try {
+                    localStorage.removeItem("library_active_filters");
+                  } catch (e) {}
+                  loadFilterOptions();
+                  fetchBooks(true, search);
+                }}
+                className="font-sans text-[11px] font-black uppercase tracking-widest text-red-700 hover:text-white bg-white hover:bg-red-700 border border-red-300 px-3 py-1.5 rounded-sm transition-all flex items-center gap-1.5 shadow-2xs active:scale-95 cursor-pointer"
+              >
+                <X size={13} className="stroke-[2.5]" /> Resetta filtri
+              </button>
+            )}
           </div>
+
+          {/* Banner con dettaglio filtri attivi (visibile chiaramente anche a menu laterale chiuso) */}
+          {hasActiveFilters && (
+            <div className="mb-6 p-3 sm:p-4 bg-amber-500/10 border border-amber-500/30 rounded-sm shadow-2xs flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-200">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 text-amber-950 font-sans text-xs font-black uppercase tracking-wider">
+                  <Filter size={13} className="text-amber-700 shrink-0" />
+                  <span>Filtri attivi:</span>
+                </div>
+                {Object.entries(filters).filter(([_, v]) => typeof v === "string" && v.trim() !== "").map(([k, v]) => (
+                  <span 
+                    key={k} 
+                    className="inline-flex items-center gap-1.5 bg-white border border-amber-300/80 text-neutral-900 px-2.5 py-1 rounded-sm text-xs shadow-2xs"
+                  >
+                    <span className="font-sans text-[10px] uppercase font-bold text-neutral-500">{k}:</span>
+                    <span className="font-serif italic font-bold">{v}</span>
+                    <button 
+                      onClick={() => handleResetField(k as any)} 
+                      className="hover:text-red-700 p-0.5 text-neutral-400 hover:bg-neutral-100 rounded transition-colors cursor-pointer"
+                      title={`Rimuovi filtro ${k}`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="h-full flex flex-col items-center justify-center">
@@ -821,12 +1069,12 @@ export default function Dashboard({
                 </AnimatePresence>
               </div>
 
-              {books.length < (search ? totalFilteredBooks : absoluteTotalBooks) && (
+              {books.length < ((search || hasActiveFilters) ? totalFilteredBooks : absoluteTotalBooks) && (
                 <div className="mt-20 flex justify-center">
                   <button
                     onClick={() => fetchBooks(false, search)}
                     disabled={loadingMore}
-                    className="flex flex-col items-center group"
+                    className="flex flex-col items-center group cursor-pointer"
                   >
                     <div className={cn(
                       "w-12 h-[1px] bg-editorial-text transition-all mb-4",
@@ -836,7 +1084,7 @@ export default function Dashboard({
                       {loadingMore ? "Caricamento in corso..." : "Carica altri volumi"}
                     </span>
                     <span className="font-sans text-[10px] opacity-60 mt-2 uppercase tracking-widest">
-                      Visualizzati {books.length} su {search ? totalFilteredBooks : absoluteTotalBooks}
+                      Visualizzati {books.length} su {(search || hasActiveFilters) ? totalFilteredBooks : absoluteTotalBooks}
                     </span>
                   </button>
                 </div>
@@ -866,7 +1114,10 @@ export default function Dashboard({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsFormOpen(false)}
+              onClick={() => {
+                setIsFormOpen(false);
+                setEditingBook(undefined);
+              }}
               className="absolute inset-0 bg-editorial-text/20 backdrop-blur-[2px]"
             />
             <motion.div
@@ -879,7 +1130,10 @@ export default function Dashboard({
               <div className="flex-1 overflow-y-auto">
                 <BookForm 
                    initialData={editingBook} 
-                   onClose={() => setIsFormOpen(false)} 
+                   onClose={() => {
+                     setIsFormOpen(false);
+                     setEditingBook(undefined);
+                   }} 
                    onDelete={handleDelete}
                    onError={(msg) => showToast(msg, "error")}
                    suggestions={{
@@ -912,7 +1166,10 @@ export default function Dashboard({
             onSuccess={(count) => {
               showToast(`Aggiornati ${count} volumi con successo`);
               setFilters({});
-              setFilterInputs({ autore: "", genere: "", editore: "", collana: "" });
+              setFilterInputs({ autore: "", genere: "", editore: "", collana: "", scaffale: "", nazione: "" });
+              try {
+                localStorage.removeItem("library_active_filters");
+              } catch (e) {}
               loadFilterOptions();
               fetchBooks(true, search);
             }}

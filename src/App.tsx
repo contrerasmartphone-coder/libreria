@@ -5,7 +5,7 @@
 
 import { useState, useEffect, FormEvent } from "react";
 import Dashboard from "./components/Dashboard";
-import { BookOpen, LogIn, LogOut, Library, ShieldAlert, Search, Menu, ChevronLeft, Grid, List as ListIcon, Plus, Type, Printer, X, HelpCircle } from "lucide-react";
+import { BookOpen, LogIn, LogOut, Library, ShieldAlert, Search, Menu, ChevronLeft, Grid, List as ListIcon, Plus, Type, Printer, X, HelpCircle, Filter } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { libraryService } from "./services/libraryService";
 import { supabase } from "./lib/supabase";
@@ -31,7 +31,20 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    try {
+      const saved = localStorage.getItem("library_view_mode");
+      if (saved === "grid" || saved === "list") return saved;
+    } catch (e) {}
+    return "grid";
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("library_view_mode", viewMode);
+    } catch (e) {}
+  }, [viewMode]);
+
   const [fontTheme, setFontTheme] = useState<FontTheme>(() => {
     return (localStorage.getItem("library-font-theme") as FontTheme) || "serif";
   });
@@ -40,9 +53,51 @@ export default function App() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const isCloudEnabled = libraryService.isCloudEnabled;
 
-  const [activeFilters, setActiveFilters] = useState<any>({});
-  const [sortBy, setSortBy] = useState("created_at");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [activeFilters, setActiveFilters] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem("library_active_filters");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch (e) {}
+    return {};
+  });
+
+  const [resetFiltersSignal, setResetFiltersSignal] = useState(0);
+
+  const hasActiveFilters = Boolean(
+    activeFilters && Object.values(activeFilters).some((v: any) => typeof v === "string" && v.trim() !== "")
+  );
+  const isListFiltered = Boolean(debouncedSearch.trim() || hasActiveFilters);
+
+  const handleResetFilters = () => {
+    setActiveFilters({});
+    setSearch("");
+    setDebouncedSearch("");
+    try {
+      localStorage.removeItem("library_active_filters");
+    } catch (e) {}
+    setResetFiltersSignal(prev => prev + 1);
+  };
+  const [sortBy, setSortBy] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("library_sort_by");
+      if (saved && ["created_at", "titolo", "autore", "codice", "anno", "scaffale"].includes(saved)) {
+        return saved;
+      }
+    } catch (e) {}
+    return "created_at";
+  });
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(() => {
+    try {
+      const saved = localStorage.getItem("library_sort_order");
+      if (saved === "asc" || saved === "desc") {
+        return saved;
+      }
+    } catch (e) {}
+    return "desc";
+  });
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [activeHelpSection, setActiveHelpSection] = useState("intro");
@@ -500,20 +555,28 @@ export default function App() {
             <div className="flex items-center">
               <button 
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="flex items-center gap-2.5 md:gap-3 p-1.5 md:p-1 hover:bg-black/5 transition-all rounded-sm group active:scale-[0.98]"
-                title={isMenuOpen ? "Nascondi Menu" : "Mostra Menu"}
+                className="flex items-center gap-2.5 md:gap-3 p-1.5 md:p-1 hover:bg-black/5 transition-all rounded-sm group active:scale-[0.98] relative"
+                title={isMenuOpen ? "Nascondi Menu" : (hasActiveFilters ? "Mostra Menu (Filtri attivi)" : "Mostra Menu")}
               >
-                <div className="w-8 h-10 md:w-5 md:h-7 bg-editorial-text flex items-center justify-center shadow-sm skew-y-1 shrink-0 transition-transform group-hover:scale-105">
+                <div className="w-8 h-10 md:w-5 md:h-7 bg-editorial-text flex items-center justify-center shadow-sm skew-y-1 shrink-0 transition-transform group-hover:scale-105 relative">
                   <Library className="text-editorial-bg w-4 h-4 md:w-3.5 md:h-3.5" />
+                  {hasActiveFilters && !isMenuOpen && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-editorial-bg animate-pulse" />
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 overflow-hidden">
                   <h1 className="text-xl md:text-lg font-black tracking-tighter italic hidden xs:block lg:block whitespace-nowrap">BIBLIOTECA</h1>
+                  {hasActiveFilters && !isMenuOpen && (
+                    <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/20 text-amber-950 border border-amber-500/40 rounded font-sans text-[8px] font-black uppercase tracking-wider">
+                      <Filter size={8} /> Filtri
+                    </span>
+                  )}
                 </div>
               </button>
             </div>
 
-            <div className="flex-1 max-w-lg mx-3 md:mx-4 flex items-center gap-2 md:gap-4">
-              <div className="relative group flex-1">
+            <div className="flex-1 max-w-lg mx-2 sm:mx-3 md:mx-4 flex items-center gap-2 md:gap-3 min-w-0">
+              <div className="relative group flex-1 min-w-[110px]">
                 <Search className="absolute left-0 top-1/2 -translate-y-1/2 w-4.5 h-4.5 md:w-3.5 md:h-3.5 text-editorial-text opacity-80 group-focus-within:opacity-100 transition-opacity" />
                 <input
                   type="text"
@@ -523,9 +586,38 @@ export default function App() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              <div className="hidden sm:flex items-baseline gap-1.5 md:gap-2 font-sans text-[10px] md:text-[9px] font-bold uppercase tracking-widest opacity-80 whitespace-nowrap">
-                <span className="text-base md:text-xs text-editorial-text opacity-100 font-black leading-none">{debouncedSearch ? filteredCount : totalCount}</span>
-                <span className="leading-none">Volumi</span>
+
+              {/* Indicatore volumi visualizzati e tasto Resetta filtri nel menu intestazione */}
+              <div className="flex items-center gap-1.5 sm:gap-2 font-sans text-[10px] md:text-[9px] uppercase tracking-widest whitespace-nowrap shrink-0">
+                {isListFiltered ? (
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <div 
+                      className="flex items-baseline gap-1 bg-amber-500/15 border border-amber-500/40 text-amber-950 px-2 py-1 rounded-sm shadow-2xs font-bold"
+                      title={hasActiveFilters ? "Elenco con filtri avanzati attivi" : "Elenco filtrato per ricerca"}
+                    >
+                      <Filter size={11} className="text-amber-700 shrink-0 hidden xs:inline" />
+                      <span className="text-sm md:text-xs text-amber-950 font-black leading-none">{filteredCount}</span>
+                      <span className="opacity-70 text-[9px] md:text-[8px] lowercase font-semibold">su</span>
+                      <span className="text-editorial-text font-bold leading-none">{totalCount}</span>
+                      <span className="hidden md:inline leading-none font-semibold">Volumi</span>
+                    </div>
+
+                    <button
+                      onClick={handleResetFilters}
+                      className="flex items-center gap-1 px-2 py-1 sm:px-2.5 bg-red-600 hover:bg-red-700 text-white rounded-sm font-sans text-[10px] md:text-[9px] font-black uppercase tracking-widest transition-all shadow-xs active:scale-95 cursor-pointer shrink-0"
+                      title="Resetta filtri attivi e mostra tutti i volumi"
+                    >
+                      <X size={12} className="shrink-0 stroke-[3]" />
+                      <span className="hidden sm:inline">Resetta filtri</span>
+                      <span className="sm:hidden">Reset</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="hidden sm:flex items-baseline gap-1.5 md:gap-2 font-bold opacity-80">
+                    <span className="text-base md:text-xs text-editorial-text opacity-100 font-black leading-none">{totalCount}</span>
+                    <span className="leading-none">Volumi</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -588,6 +680,7 @@ export default function App() {
               setIsFormOpen={setIsFormOpen}
               useLocalMode={useLocalMode}
               onLogout={handleLogout}
+              resetFiltersSignal={resetFiltersSignal}
               onCountsChange={(total, filtered) => {
                 setTotalCount(total);
                 setFilteredCount(filtered);
@@ -596,6 +689,13 @@ export default function App() {
                 setActiveFilters(flts);
                 setSortBy(sBy);
                 setSortOrder(sOrder);
+                try {
+                  if (flts && Object.values(flts).some(Boolean)) {
+                    localStorage.setItem("library_active_filters", JSON.stringify(flts));
+                  } else {
+                    localStorage.removeItem("library_active_filters");
+                  }
+                } catch (e) {}
               }}
             />
           </main>
@@ -981,7 +1081,7 @@ export default function App() {
                             <div className="border-l-2 border-neutral-300 pl-3">
                               <strong className="text-neutral-800 uppercase tracking-wide text-[10px] block mb-1">1. Dati Anagrafici & Identificazione:</strong>
                               <ul className="list-disc list-inside text-neutral-600 space-y-1">
-                                <li><strong>Codice (ISBN/Interno):</strong> Codice a barre o contrassegno univoco della biblioteca.</li>
+                                <li><strong>Codice Inventario / Univoco:</strong> Contrassegno del volume nella biblioteca. Quando si inserisce un nuovo libro, viene pre-compilato in automatico prendendo il codice dell'ultimo volume inserito e aumentandolo di 1 trattandolo come un numero.</li>
                                 <li><strong>Titolo & Autore:</strong> I dettagli cardine del volume (l'autore viene autocompletato durante la digitazione).</li>
                                 <li><strong>Editore, Collana & Anno:</strong> Informazioni utili per tracciare la specifica edizione cartacea.</li>
                               </ul>
@@ -1038,10 +1138,16 @@ export default function App() {
                                 💡 Suggerimento Predittivo: Inizia a digitare le prime lettere del valore cercato (es. digita "cina"): apparirà un elenco a discesa automatico attinto dai valori realmente già presenti in archivio, consentendo l'auto-selezione ed impedendo refusi.
                               </p>
                             </div>
+                              <div className="bg-white p-3 border border-neutral-200 shadow-sm rounded-sm">
+                                <h4 className="font-bold text-neutral-800 uppercase text-[10px] tracking-wider mb-1">🔀 Ordinamento del Catalogo:</h4>
+                                <p className="text-neutral-600 leading-relaxed">
+                                  Puoi ordinare i volumi in base a: <strong>Data Inserimento, Titolo, Autore, Codice, Anno, Scaffale</strong>. Facendo clic sull'icona di fianco al selettore puoi invertire l'ordinamento tra crescente (A-Z, 0-9) e decrescente (Z-A, 9-0). La chiave e l'ordine selezionati vengono memorizzati nel browser e conservati anche dopo l'aggiornamento o la ricarica della pagina.
+                                </p>
+                              </div>
                             <div className="bg-white p-3 border border-neutral-200 shadow-sm rounded-sm">
-                              <h4 className="font-bold text-neutral-800 uppercase text-[10px] tracking-wider mb-1">🧹 Reimpostazione Rapida:</h4>
+                              <h4 className="font-bold text-neutral-800 uppercase text-[10px] tracking-wider mb-1">🧹 Persistenza e Reset dei Filtri:</h4>
                               <p className="text-neutral-600 leading-relaxed">
-                                Un bottone rosso "Svuota filtri" permette di resettare istantaneamente tutte le preferenze di filtraggio ripristinando la visualizzazione completa dell'inventario.
+                                I filtri avanzati applicati (Genere, Autore, Editore, Collana, Scaffale, Nazione) rimangono automaticamente salvati e persistenti anche ricaricando o aggiornando la pagina. Quando l'elenco è filtrato, lo stato viene evidenziato con un badge sia sul pulsante Biblioteca che nell'intestazione con il numero di volumi trovati, e sopra il catalogo. Il pulsante <strong>"Resetta filtri"</strong> è sempre accessibile sia nel pannello laterale, sia direttamente nel menu di intestazione accanto al conteggio volumi (visibile anche a menu a scomparsa chiuso), sia nel banner riassuntivo del catalogo.
                               </p>
                             </div>
                           </div>

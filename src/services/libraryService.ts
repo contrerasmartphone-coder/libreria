@@ -27,6 +27,63 @@ const escapePostgrestValue = (val: string): string => {
   return `"${escaped}"`;
 };
 
+/**
+ * Tratta il codice del libro come numero e lo incrementa di 1,
+ * preservando eventuali prefissi/suffissi e formattazioni con zeri iniziali.
+ */
+export const incrementBookCode = (code: string | undefined | null): string => {
+  if (!code || typeof code !== 'string') return "1";
+  const trimmed = code.trim();
+  if (!trimmed) return "1";
+
+  // Caso 1: Stringa puramente numerica (es. "1", "42", "0042", "1005")
+  if (/^\d+$/.test(trimmed)) {
+    const num = parseInt(trimmed, 10);
+    const nextNum = num + 1;
+    // Se aveva zeri iniziali (es. "0042"), mantiene la larghezza minima originaria
+    if (trimmed.startsWith('0') && trimmed.length > 1) {
+      return String(nextNum).padStart(trimmed.length, '0');
+    }
+    return String(nextNum);
+  }
+
+  // Caso 2: Prefisso alfanumerico seguito da numeri finali (es. "BN-0001", "LIB-42", "VOL 99")
+  const endDigitsMatch = trimmed.match(/^(.*?)(\d+)$/);
+  if (endDigitsMatch) {
+    const prefix = endDigitsMatch[1];
+    const digitPart = endDigitsMatch[2];
+    const num = parseInt(digitPart, 10);
+    const nextNum = num + 1;
+    const padded = (digitPart.startsWith('0') && digitPart.length > 1)
+      ? String(nextNum).padStart(digitPart.length, '0')
+      : String(nextNum);
+    return `${prefix}${padded}`;
+  }
+
+  // Caso 3: Numeri racchiusi all'interno del codice (es. "VOL-42-A")
+  const innerDigitsMatch = trimmed.match(/^(.*?)(\d+)(.*?)$/);
+  if (innerDigitsMatch) {
+    const prefix = innerDigitsMatch[1];
+    const digitPart = innerDigitsMatch[2];
+    const suffix = innerDigitsMatch[3];
+    const num = parseInt(digitPart, 10);
+    const nextNum = num + 1;
+    const padded = (digitPart.startsWith('0') && digitPart.length > 1)
+      ? String(nextNum).padStart(digitPart.length, '0')
+      : String(nextNum);
+    return `${prefix}${padded}${suffix}`;
+  }
+
+  // Caso 4: Tentativo numerico diretto
+  const directNum = Number(trimmed);
+  if (!isNaN(directNum)) {
+    return String(Math.floor(directNum) + 1);
+  }
+
+  // Fallback se il codice è puramente alfabetico senza alcuna cifra
+  return "1";
+};
+
 export const libraryService = {
   isCloudEnabled,
   cloudProvider: 'supabase',
@@ -211,14 +268,20 @@ export const libraryService = {
 
     const books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
     
+    let codiceToUse = book.codice;
+    if (!codiceToUse || String(codiceToUse).trim() === "") {
+      codiceToUse = await this.getNextAvailableCode();
+    }
+
     // Verifica duplicato codice PRIMA del salvataggio locale
-    const duplicate = books.find(b => b.codice === book.codice);
+    const duplicate = books.find(b => b.codice === codiceToUse);
     if (duplicate) {
-      throw new Error(`Il codice ${book.codice} è già assegnato al volume: "${duplicate.titolo}"`);
+      throw new Error(`Il codice ${codiceToUse} è già assegnato al volume: "${duplicate.titolo}"`);
     }
 
     const newBook: Book = {
       ...book,
+      codice: codiceToUse,
       id: crypto.randomUUID(),
       ownerId: 'local-user',
       createdAt: new Date().toISOString(),
@@ -372,7 +435,7 @@ export const libraryService = {
       const to = from + pageSize - 1;
 
       const { data, error, count } = await query
-        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .order(sortBy, { ascending: sortOrder === 'asc', nullsFirst: false })
         .range(from, to);
       
       if (error) {
@@ -413,13 +476,19 @@ export const libraryService = {
     if (filters.scaffale) books = books.filter(b => b.scaffale?.toLowerCase().includes(filters.scaffale!.toLowerCase()));
     if (filters.nazione) books = books.filter(b => b.nazione?.toLowerCase().includes(filters.nazione!.toLowerCase()));
 
-    // Sorting
+    // Sorting with natural language and numeric support (e.g. Scaffale 1, 2, 10, Autore A-Z)
     books.sort((a, b) => {
-      const valA = (a as any)[sortBy] || "";
-      const valB = (b as any)[sortBy] || "";
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+      const rawA = (a as any)[sortBy];
+      const rawB = (b as any)[sortBy];
+      const valA = rawA === null || rawA === undefined ? "" : String(rawA).trim();
+      const valB = rawB === null || rawB === undefined ? "" : String(rawB).trim();
+      
+      if (!valA && valB) return 1;
+      if (!valB && valA) return -1;
+      if (!valA && !valB) return 0;
+
+      const cmp = valA.localeCompare(valB, 'it', { sensitivity: 'base', numeric: true });
+      return sortOrder === 'asc' ? cmp : -cmp;
     });
     
     const total = books.length;
@@ -459,7 +528,7 @@ export const libraryService = {
       if (filters.nazione) query = query.ilike('nazione', `%${filters.nazione}%`);
 
       const { data, error } = await query
-        .order(sortBy, { ascending: sortOrder === 'asc' })
+        .order(sortBy, { ascending: sortOrder === 'asc', nullsFirst: false })
         .range(0, 10000); // Fetch all filtered items up to a high limit
       
       if (error) {
@@ -497,13 +566,19 @@ export const libraryService = {
     if (filters.scaffale) books = books.filter(b => b.scaffale?.toLowerCase().includes(filters.scaffale!.toLowerCase()));
     if (filters.nazione) books = books.filter(b => b.nazione?.toLowerCase().includes(filters.nazione!.toLowerCase()));
 
-    // Sorting
+    // Sorting with natural language and numeric support (e.g. Scaffale 1, 2, 10, Autore A-Z)
     books.sort((a, b) => {
-      const valA = (a as any)[sortBy] || "";
-      const valB = (b as any)[sortBy] || "";
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+      const rawA = (a as any)[sortBy];
+      const rawB = (b as any)[sortBy];
+      const valA = rawA === null || rawA === undefined ? "" : String(rawA).trim();
+      const valB = rawB === null || rawB === undefined ? "" : String(rawB).trim();
+      
+      if (!valA && valB) return 1;
+      if (!valB && valA) return -1;
+      if (!valA && !valB) return 0;
+
+      const cmp = valA.localeCompare(valB, 'it', { sensitivity: 'base', numeric: true });
+      return sortOrder === 'asc' ? cmp : -cmp;
     });
     
     return books;
@@ -638,30 +713,119 @@ export const libraryService = {
   },
 
   async getNextAvailableCode(): Promise<string> {
-    let books: Book[] = [];
+    const existingCodes = new Set<string>();
+    let lastBookCode: string | null = null;
+
     if (this.isCloudEnabled) {
-      const { data, error } = await supabase
-        .from('books')
-        .select('codice');
-      if (error) {
-        console.error("Errore recupero codici per auto-incremento:", error);
-        return "10000";
+      try {
+        // 1. Cerca il libro inserito più recentemente ordinando per created_at DESC
+        const { data: latestData, error: latestError } = await supabase
+          .from('books')
+          .select('codice, created_at')
+          .order('created_at', { ascending: false, nullsFirst: false })
+          .limit(25);
+
+        if (!latestError && latestData && latestData.length > 0) {
+          // Se più volumi condividono lo stesso created_at massimo (es. importazione batch),
+          // prendiamo il codice col valore numerico più alto tra quelli del lotto
+          const maxCreatedAt = latestData[0].created_at;
+          const topBatch = latestData.filter(b => b.created_at === maxCreatedAt && b.codice && String(b.codice).trim() !== "");
+          
+          if (topBatch.length > 1) {
+            topBatch.sort((a, b) => {
+              const numA = parseInt(String(a.codice).replace(/\D/g, ''), 10) || 0;
+              const numB = parseInt(String(b.codice).replace(/\D/g, ''), 10) || 0;
+              return numB - numA;
+            });
+            lastBookCode = String(topBatch[0].codice).trim();
+          } else {
+            const firstValid = latestData.find(b => b.codice && String(b.codice).trim() !== "");
+            if (firstValid) {
+              lastBookCode = String(firstValid.codice).trim();
+            }
+          }
+        }
+
+        // 2. Recupera l'elenco dei codici esistenti per verificare l'unicità ed evitare duplicati
+        const { data: allData, error: allError } = await supabase
+          .from('books')
+          .select('codice');
+        
+        if (!allError && allData) {
+          allData.forEach(item => {
+            if (item.codice) existingCodes.add(String(item.codice).trim());
+          });
+          // Se non è stato trovato tramite created_at, usa l'ultimo codice disponibile
+          if (!lastBookCode && allData.length > 0) {
+            const valid = allData.filter(i => i.codice && String(i.codice).trim() !== "");
+            if (valid.length > 0) {
+              lastBookCode = String(valid[valid.length - 1].codice).trim();
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Errore recupero codice ultimo libro Cloud:", err);
       }
-      books = (data || []).map(b => this.mapDbToBook(b));
     } else {
-      books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+      const books = getLocalData<Book>(LOCAL_STORAGE_KEYS.BOOKS);
+      if (books && books.length > 0) {
+        books.forEach(b => {
+          if (b.codice) existingCodes.add(String(b.codice).trim());
+        });
+
+        // Individua l'ultimo libro inserito (in locale le aggiunte avvengono in coda all'array e hanno createdAt)
+        const hasTimestamps = books.some(b => b.createdAt);
+        if (hasTimestamps) {
+          let maxTime = -Infinity;
+          let latestBooks: Book[] = [];
+          for (const b of books) {
+            if (!b.codice || String(b.codice).trim() === "") continue;
+            const t = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            if (t > maxTime) {
+              maxTime = t;
+              latestBooks = [b];
+            } else if (t === maxTime) {
+              latestBooks.push(b);
+            }
+          }
+          if (latestBooks.length > 0) {
+            latestBooks.sort((a, b) => {
+              const numA = parseInt(String(a.codice).replace(/\D/g, ''), 10) || 0;
+              const numB = parseInt(String(b.codice).replace(/\D/g, ''), 10) || 0;
+              return numB - numA;
+            });
+            lastBookCode = String(latestBooks[0].codice).trim();
+          }
+        }
+
+        // Fallback: scansiona dal fondo dell'array locale
+        if (!lastBookCode) {
+          for (let i = books.length - 1; i >= 0; i--) {
+            if (books[i].codice && String(books[i].codice).trim() !== "") {
+              lastBookCode = String(books[i].codice).trim();
+              break;
+            }
+          }
+        }
+      }
     }
 
-    const numericCodes = books
-      .map(b => parseInt(b.codice))
-      .filter(n => !isNaN(n));
+    // Se non esiste ancora alcun libro registrato, il primo codice parte da "1"
+    if (!lastBookCode) {
+      return "1";
+    }
 
-    const baseCode = 10000;
-    if (numericCodes.length === 0) return baseCode.toString();
+    // Calcola il codice incrementando di 1 quello dell'ultimo libro inserito (trattato numericamente)
+    let nextCode = incrementBookCode(lastBookCode);
 
-    const maxCode = Math.max(...numericCodes);
-    const nextCode = Math.max(baseCode, maxCode + 1);
-    return nextCode.toString();
+    // Garanzia di unicità: se il codice calcolato dovesse già esistere in archivio, incrementa ulteriormente
+    let safetyCounter = 0;
+    while (existingCodes.has(nextCode) && safetyCounter < 1000) {
+      nextCode = incrementBookCode(nextCode);
+      safetyCounter++;
+    }
+
+    return nextCode;
   },
 
   async searchFieldSuggestions(field: string, searchTerm: string): Promise<string[]> {

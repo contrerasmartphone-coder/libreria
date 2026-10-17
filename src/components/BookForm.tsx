@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Book } from "../types";
 import { libraryService } from "../services/libraryService";
-import { Save, Loader2, BookOpen, Info, User, Tag, Calendar, MapPin, Layers, BookText, ShieldCheck, Languages, X, Trash2, Plus, Edit2, Check, Printer } from "lucide-react";
+import { Save, Loader2, BookOpen, Info, User, Tag, Calendar, MapPin, Layers, BookText, ShieldCheck, Languages, X, Trash2, Plus, Edit2, Check, Printer, RotateCw } from "lucide-react";
 import { cn } from "../lib/utils";
 
 interface BookFormProps {
@@ -220,18 +220,30 @@ export default function BookForm({ initialData, onClose, onSuccess, onError, onD
     editingRaccontoAutore
   ]);
 
-// Pre-fill codice for new entries
+  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
+
+  const fetchNextCode = async (forceOverwrite = false) => {
+    setIsGeneratingCode(true);
+    try {
+      const nextCode = await libraryService.getNextAvailableCode();
+      setFormData(prev => {
+        // Se non forzato, non sovrascrive se l'utente ha già digitato qualcosa
+        if (!forceOverwrite && prev.codice && prev.codice.trim() !== "") {
+          return prev;
+        }
+        return { ...prev, codice: nextCode };
+      });
+    } catch (e) {
+      console.error("Errore recupero codice calcolato:", e);
+    } finally {
+      setIsGeneratingCode(false);
+    }
+  };
+
+  // Pre-fill automatico del codice per i nuovi volumi prendendo l'ultimo inserito + 1
   useEffect(() => {
     if (!initialData) {
-      const fetchNextCode = async () => {
-        try {
-          const nextCode = await libraryService.getNextAvailableCode();
-          setFormData(prev => ({ ...prev, codice: nextCode }));
-        } catch (e) {
-          console.error("Error fetching next code:", e);
-        }
-      };
-      fetchNextCode();
+      fetchNextCode(false);
     }
   }, [initialData]);
 
@@ -690,16 +702,30 @@ export default function BookForm({ initialData, onClose, onSuccess, onError, onD
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
               <div className="space-y-2">
-                <label className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">
-                  <Tag size={12} className="opacity-100" /> Codice Inventario
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 font-sans text-xs font-black uppercase tracking-wider text-editorial-text opacity-90">
+                    <Tag size={12} className="opacity-100" /> Codice Inventario
+                  </label>
+                  {!initialData && (
+                    <button
+                      type="button"
+                      onClick={() => fetchNextCode(true)}
+                      disabled={isGeneratingCode}
+                      className="flex items-center gap-1.5 text-[11px] font-sans font-bold text-editorial-text/70 hover:text-editorial-text transition-colors"
+                      title="Ricalcola codice prendendo l'ultimo inserito e aumentandolo di 1"
+                    >
+                      <RotateCw size={11} className={cn("transition-transform", isGeneratingCode && "animate-spin")} />
+                      <span>{isGeneratingCode ? "Calcolo..." : "Auto (+1 da ultimo)"}</span>
+                    </button>
+                  )}
+                </div>
                 <textarea
                   name="codice"
                   value={formData.codice}
                   onChange={handleChange}
                   rows={1}
                   className="w-full bg-transparent border-b border-editorial-text/30 py-1.5 text-lg font-black focus:outline-none focus:border-editorial-text resize-none"
-                  placeholder="es. BN-0001"
+                  placeholder="es. 1001"
                 />
               </div>
               <div className="space-y-2">
